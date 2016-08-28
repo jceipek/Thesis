@@ -5,7 +5,8 @@ const MESSAGE_TYPE = {
 }
 
 const PORT = 8053;
-const HOST = '127.0.0.1';
+// const HOST = '127.0.0.1';
+const HOST = '192.168.1.143';
 
 const dgram = require('dgram');
 
