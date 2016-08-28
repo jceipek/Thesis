@@ -1,0 +1,107 @@
+const Promise = require("bluebird");
+
+const MESSAGE_TYPE = {
+  DEFAULT: 0x00
+}
+
+const PORT = 8053;
+const HOST = '127.0.0.1';
+
+const dgram = require('dgram');
+
+const client = dgram.createSocket('udp4');
+
+
+const sendFn = function (message, callback) {
+  client.send(message, 0, message.length, PORT, HOST, callback /* (err, bytes) */); // NOTE(Julian): Buffer can't be reused until callback has been called
+};
+
+var _currSeqId = 0;
+const sendObjectPosition = function (obj, callback) {
+  fillBufferWithPosMsg(_sendBuffer, 0, MESSAGE_TYPE.DEFAULT, _currSeqId, obj.id, obj.position);
+  _currSeqId++;
+  sendFn(_sendBuffer, callback);
+};
+
+const sendObjectPositionFn = Promise.promisify(sendObjectPosition);
+
+const fillBufferWithPosMsg = function (buf, offset, msgType, seqNumber, objectId, position) {
+  // XXX(Julian): Assuming Little Endian, but this may be a big mistake!!!
+  offset = buf.writeInt8(msgType, offset, true); // Last is noAssert?
+  offset = buf.writeInt32LE(seqNumber, offset, true);
+  offset = buf.writeUInt16LE(objectId, offset, true);
+  offset = buf.writeFloatLE(position.x, offset, true);
+  offset = buf.writeFloatLE(position.y, offset, true);
+  offset = buf.writeFloatLE(position.z, offset, true);
+}
+
+var _time = 0;
+
+const _sendBuffer = Buffer.allocUnsafe(23);
+
+const makeObjectFn = function (id) {
+  return {
+    position: { x: 0, y: 0, z: 0 }
+  , id: id
+  };
+};
+
+// const _objects = Array(500);
+const _objects = Array(100);
+for (var i = _objects.length - 1; i >= 0; i--) {
+  _objects[i] = makeObjectFn(i);
+}
+
+
+const FPS = 90;
+// const FPS = 60;
+
+
+// var _start = process.hrtime();
+// var elapsed_time = function(note){
+//     var precision = 3; // 3 decimal places
+//     var elapsed = process.hrtime(_start)[1] / 1000000; // divide by a million to get nano to milli
+//     console.log(process.hrtime(_start)[0] + " s, " + elapsed.toFixed(precision) + " ms - " + note); // print message + time
+//     _start = process.hrtime(); // reset the timer
+// }
+
+
+var interval = setInterval(function() {
+
+  // var DEBUG_start = process.hrtime();
+
+  for (var objectId = 0; objectId < _objects.length; objectId++) {
+    var pos = _objects[objectId].position;
+
+    pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
+    pos.y = Math.sin(_time*0.1+objectId/2)*30;
+    pos.z = Math.cos(_time*0.1+objectId/2)*30;
+  }
+
+  var DEBUG_start_sending = process.hrtime();
+
+  Promise.each(_objects, function (x) { return sendObjectPositionFn(x); }).then(function () {
+    var elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+    console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+  });
+
+  _time += 1/FPS;
+  // if (_time > 10000) {
+  //   _time = 0;
+  // }
+}, 1000/FPS);
+
+//client.close();
+
+const server = client;//dgram.createSocket('udp4');
+
+server.on('listening', function () {
+    var address = server.address();
+    console.log('UDP Server listening on ' + address.address + ":" + address.port);
+});
+
+// server.on('message', function (message, remote) {
+//     console.log(remote.address + ':' + remote.port +' - ' + message);
+// });
+
+// server.bind(PORT2, HOST);
