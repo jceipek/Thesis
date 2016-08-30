@@ -1,10 +1,11 @@
+namespace Giverspace {
 using UnityEngine;
 using Valve.VR;
 public class IOLayer : MonoBehaviour {
 
     [System.Serializable]
     class ControllerInfo {
-        public SteamVR_TrackedObject TrackedObject;
+        [SerializeField] public SteamVR_TrackedObject TrackedObject;
         public Vector3 position;
         public Quaternion rotation;
         public bool grabbed;
@@ -96,4 +97,5 @@ public class IOLayer : MonoBehaviour {
     //     _sendBufferWriter.Write(state.rAxis4.x);
     //     _sendBufferWriter.Write(state.rAxis4.y);
     // }
+}
 }

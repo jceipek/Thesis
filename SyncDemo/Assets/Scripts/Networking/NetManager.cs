@@ -1,8 +1,9 @@
+namespace Giverspace {
+
 using UnityEngine;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using System.Text;
 using System.IO;
 
 public enum MessageType {
@@ -210,4 +211,5 @@ public class NetManager : MonoBehaviour {
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
     }
 
+}   
 }
