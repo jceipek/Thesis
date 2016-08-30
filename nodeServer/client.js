@@ -1,14 +1,15 @@
 const Promise = require("bluebird");
 
 const MESSAGE_TYPE = {
-  DEFAULT: 0x00
+  Unknown: -1,
+  Default: 0,
+  Position: 1
 }
 
 const PORT = 8053;
 // const HOST = '127.0.0.1';
 // const HOST = '192.168.1.143';
 const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-// const HOST = '192.168.1.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 
 const dgram = require('dgram');
 
@@ -25,7 +26,7 @@ const sendFn = function (message, callback) {
 
 var _currSeqId = 0;
 const sendObjectPosition = function (obj, callback) {
-  fillBufferWithPosMsg(_sendBuffer, 0, MESSAGE_TYPE.DEFAULT, _currSeqId, obj.id, obj.position);
+  fillBufferWithPosMsg(_sendBuffer, 0, MESSAGE_TYPE.Position, _currSeqId, obj.id, obj.position);
   _currSeqId++;
   sendFn(_sendBuffer, callback);
 };

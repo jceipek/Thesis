@@ -126,6 +126,7 @@ public class NetManager : MonoBehaviour {
             var t_Consumer = new Thread(new ThreadStart(Reader));
             t_Consumer.IsBackground = true;
             t_Consumer.Start();
+            _running = true;
         } else {
             return;
         }
@@ -133,7 +134,6 @@ public class NetManager : MonoBehaviour {
 
     void Update () {
         _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
-        // Debug.Log(_readMessageBuffer.Count);
         for (int i = 0; i < _readMessageBuffer.Count; i++) {
             ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
             // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
@@ -150,7 +150,7 @@ public class NetManager : MonoBehaviour {
     void Reader () {
         int mostRecentNum = 0;
         NetMessage message;
-        while (true) {
+        while (_running) {
             int dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
             if (DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 if (message.SequenceNumber > mostRecentNum) {
@@ -159,6 +159,7 @@ public class NetManager : MonoBehaviour {
                 }
             }
         }
+        Debug.Log("Stopping Read Thread");
     }
 
     bool DecodeMessage (byte[] buffer, int dataLength, out NetMessage decodedMessage) {
@@ -209,6 +210,12 @@ public class NetManager : MonoBehaviour {
         _sendBufferWriter.Write(grab2);
 
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
+    }
+
+    bool _running = true;
+    void OnDisable () {
+        _running = false;
+        Debug.Log("Disable!");
     }
 
 }   
