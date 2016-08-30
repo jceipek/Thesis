@@ -2,8 +2,8 @@ const Promise = require("bluebird");
 
 const MESSAGE_TYPE = {
   Unknown: -1,
-  Default: 0,
-  Position: 1
+  Default: 0x00,
+  Position: 0x01
 }
 
 const PORT = 8053;
