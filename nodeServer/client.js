@@ -47,8 +47,8 @@ const makeObjectFn = function (id) {
   };
 };
 
-// const _objects = Array(500);
-const _objects = Array(100);
+// const _objects = Array(300);
+const _objects = Array(1);
 for (var i = _objects.length - 1; i >= 0; i--) {
   _objects[i] = makeObjectFn(i);
 }
@@ -67,16 +67,35 @@ const FPS = 90;
 // }
 
 
+// var triangleWave = function (t, halfPeriod) {
+//   return (2/halfPeriod) * (t - halfPeriod * (t/halfPeriod + 1/2)) * Math.pow(-1, (t/halfPeriod) + 1/2);
+// }
+
+
+var _x = 0;
+var _dir = 1;
+var _gridSize = 0.1;
+
 var interval = setInterval(function() {
 
   // var DEBUG_start = process.hrtime();
 
+  _x += _dir*1/FPS;
+  if (_x >= 1 || _x <= 0) {
+    _dir = -_dir;
+  }
+
+
   for (var objectId = 0; objectId < _objects.length; objectId++) {
     var pos = _objects[objectId].position;
 
-    pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
-    pos.y = Math.sin(_time*0.1+objectId/2)*30;
-    pos.z = Math.cos(_time*0.1+objectId/2)*30;
+    // pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
+    // pos.y = Math.sin(_time*0.1+objectId/2)*30;
+    // pos.z = Math.cos(_time*0.1+objectId/2)*30;
+
+    pos.x = 0;//objectId * 2;
+    pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
+    pos.z = 0;
   }
 
   var DEBUG_start_sending = process.hrtime();

@@ -1,5 +1,5 @@
-SteamVR plugin for Unity - v1.0.8
-Copyright 2014-2016, Valve Corporation, All rights reserved.
+SteamVR plugin for Unity - v1.1.1
+Copyright (c) Valve Corporation, All rights reserved.
 
 
 Quickstart:
@@ -13,6 +13,79 @@ Requirements:
 The SteamVR runtime must be installed.  This can be found in Steam under Tools.
 
 The plugin currently only supports Windows / DX11.
+
+
+Changes for v1.1.1:
+
+* Updated to SteamVR runtime v1467410709 and SDK version 1.0.2.
+
+* Updated Copyright notice.
+
+* Added SteamVR_TrackedCamera for accessing tracked camera video stream and poses.
+
+* Added SteamVR_TestTrackedCamera scene and associated script to demonstrate how to use SteamVR_TrackedCamera.
+
+* Fix for SteamVR_Fade shader to account for changes in Unity 5.4.
+
+* SteamVR_GameView will now use the compositor's mirror texture to render the companion window (pre-Unity 5.4 only).
+
+* Renamed SteamVR_LoadLevel 'externalApp' to 'internalProcess' to reflect actual functionality.
+
+* Fixed issue with SteamVR_PlayArea material loading due to changes in Unity 5.4.
+
+* Added Screenshot support handling for stereo panoramas generation.
+
+* Removed code that was setting Time.maximumDeltaTime as this was causing issues.
+
+
+Changes for v1.1.0:
+
+* Fix for error building standalone in SteamVR_LoadLevel.
+
+* Set SteamVR_TrackedObject.isValid to false when disabled.
+
+
+Changes for v1.0.9:
+
+* Updated to SteamVR runtime v1461626459 and SDK version 0.9.20.
+
+* Updated workshop texture used in sea of cubes example level to use web page from SteamVR (was previously from Portal).
+
+* Updated various SDK changes to Unity in 5.4 betas.
+
+* Added controllerModeState to RenderModel component to control additional features like scrollwheel visibility.
+
+* RenderModels now respond to model skin changes.
+
+* Removed OnGUI and associated help text (i.e. "You may now put on your headset." notification) as this was causing unnecessary overhead.
+
+* Fix to SteamVR_Render not turning back on if all cameras were disabled and then re-enabled.
+
+* Hooked up SteamVR_Render.pauseRendering in Unity 5.4 native OpenVR integration.
+
+* Fix for input_focus event sometimes getting sent inappropriately.
+
+* Fix for timeScale handling.
+
+* Fix for SteamVR_PlayArea not finding its material in editor in Unity 5.4 due to changes in how Unity handles asset loading.
+
+* Miscellaneous fixes to reduce hitching when using SteamVR_LoadLevel to handle scene transitions.
+
+* Hooked up SteamVR_Camera.sceneResolutionScale to Unity 5.4's native vr integration render target scaling.
+
+* Forced SteamVR initialization check in SteamVR_Camera.enable (and bail upon failure) in Unity 5.4 (was already doing this in older builds).
+
+* Better handling of SteamVR_Ears component with old content.
+
+* Keep legacy head object around in case external components were referencing it (was previously getting deleted in Unity 5.4 as the head motion is now applied to the "eyes" object).
+
+* Miscellaneous fixes for SteamVR_TrackedController and SteamVR_Teleporter.
+
+* Fixed up Extra scenes SteamVR_TestThrow and SteamVR_TestIK.
+
+* Added stereo panorama screenshot support to SteamVR_Skybox.
+
+* Removed use of deprecated UnityEditorInternal.VR.VREditor.InitializeVRPlayerSettingsForBuildTarget(BuildTargetGroup.Standalone);
 
 
 Changes for v1.0.8:

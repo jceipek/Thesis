@@ -1,4 +1,4 @@
-﻿//========= Copyright 2015, Valve Corporation, All rights reserved. ===========
+﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Helper for smoothing over transitions between levels.
 //
@@ -25,14 +25,11 @@ public class SteamVR_LoadLevel : MonoBehaviour
 	// Name of level to load.
 	public string levelName;
 
-	// If loading an external application
-	public bool loadExternalApp;
+	// Name of internal process to launch (instead of levelName).
+	public string internalProcessPath;
 
-	// Name of external application to load
-	public string externalAppPath;
-
-	// The command-line args for the external application to load
-	public string externalAppArgs;
+	// The command-line args for the internal process to launch.
+	public string internalProcessArgs;
 
 	// If true, call LoadLevelAdditiveAsync instead of LoadLevelAsync.
 	public bool loadAdditive;
@@ -332,7 +329,7 @@ public class SteamVR_LoadLevel : MonoBehaviour
 		transform.parent = null;
 		DontDestroyOnLoad(gameObject);
 
-		if (loadExternalApp)
+		if (!string.IsNullOrEmpty(internalProcessPath))
 		{
 			Debug.Log("Launching external application...");
 			var applications = OpenVR.Applications;
@@ -343,45 +340,49 @@ public class SteamVR_LoadLevel : MonoBehaviour
 			else
 			{
 				var workingDirectory = Directory.GetCurrentDirectory();
-				Debug.Log("working directory: " + workingDirectory);
-				Debug.Log("path: " + externalAppPath);
-				Debug.Log("args: " + externalAppArgs);
-				var error = applications.LaunchInternalProcess(externalAppPath, externalAppArgs, workingDirectory);
+				var fullPath = Path.Combine(workingDirectory, internalProcessPath);
+				Debug.Log("LaunchingInternalProcess");
+				Debug.Log("ExternalAppPath = " + internalProcessPath);
+				Debug.Log("FullPath = " + fullPath);
+				Debug.Log("ExternalAppArgs = " + internalProcessArgs);
+				Debug.Log("WorkingDirectory = " + workingDirectory);
+				var error = applications.LaunchInternalProcess(fullPath, internalProcessArgs, workingDirectory);
 				Debug.Log("LaunchInternalProcessError: " + error);
-				Application.Quit();
+#if UNITY_EDITOR
+				UnityEditor.EditorApplication.isPlaying = false;
+#else
+				System.Diagnostics.Process.GetCurrentProcess().Kill();
+#endif
 			}
 		}
 		else
 		{
-#if !(UNITY_5_2 || UNITY_5_1 || UNITY_5_0)
 			var mode = loadAdditive ? UnityEngine.SceneManagement.LoadSceneMode.Additive : UnityEngine.SceneManagement.LoadSceneMode.Single;
 			if (loadAsync)
 			{
+				Application.backgroundLoadingPriority = ThreadPriority.Low;
 				async = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(levelName, mode);
-				yield return async;
+
+				// Performing this in a while loop instead seems to help smooth things out.
+				//yield return async;
+				while (!async.isDone)
+				{
+					yield return null;
+				}
 			}
 			else
 			{
 				UnityEngine.SceneManagement.SceneManager.LoadScene(levelName, mode);
 			}
-#else
-			if (loadAsync)
-			{
-				async = loadAdditive ? Application.LoadLevelAdditiveAsync(levelName) : Application.LoadLevelAsync(levelName);
-				yield return async;
-			}
-			else if (loadAdditive)
-			{
-				Application.LoadLevelAdditive(levelName);
-			}
-			else
-			{
-				Application.LoadLevel(levelName);
-			}
-#endif
 		}
 
+		yield return null;
+
 		System.GC.Collect();
+
+		yield return null;
+
+		Shader.WarmupAllShaders();
 
 		// Optionally wait a short period of time after loading everything back in, but before we start rendering again
 		// in order to give everything a change to settle down to avoid any hitching at the start of the new level.
