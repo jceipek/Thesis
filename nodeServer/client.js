@@ -6,11 +6,17 @@ const MESSAGE_TYPE = {
 
 const PORT = 8053;
 // const HOST = '127.0.0.1';
-const HOST = '192.168.1.143';
+// const HOST = '192.168.1.143';
+const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
+// const HOST = '192.168.1.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 
 const dgram = require('dgram');
 
 const client = dgram.createSocket('udp4');
+// client.setBroadcast(true);
+
+// client.bind(PORT);
+// client.bind();
 
 
 const sendFn = function (message, callback) {
@@ -76,40 +82,46 @@ var _x = 0;
 var _dir = 1;
 var _gridSize = 0.1;
 
-var interval = setInterval(function() {
+client.bind( function() {
+  client.setBroadcast(true)
+  // client.setMulticastTTL(128);
 
-  // var DEBUG_start = process.hrtime();
+  var interval = setInterval(function() {
 
-  _x += _dir*1/FPS;
-  if (_x >= 1 || _x <= 0) {
-    _dir = -_dir;
-  }
+    // var DEBUG_start = process.hrtime();
+
+    _x += _dir*1/FPS;
+    if (_x >= 1 || _x <= 0) {
+      _dir = -_dir;
+    }
 
 
-  for (var objectId = 0; objectId < _objects.length; objectId++) {
-    var pos = _objects[objectId].position;
+    for (var objectId = 0; objectId < _objects.length; objectId++) {
+      var pos = _objects[objectId].position;
 
-    // pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
-    // pos.y = Math.sin(_time*0.1+objectId/2)*30;
-    // pos.z = Math.cos(_time*0.1+objectId/2)*30;
+      // pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
+      // pos.y = Math.sin(_time*0.1+objectId/2)*30;
+      // pos.z = Math.cos(_time*0.1+objectId/2)*30;
 
-    pos.x = 0;//objectId * 2;
-    pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
-    pos.z = 0;
-  }
+      pos.x = 0;//objectId * 2;
+      pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
+      pos.z = 0;
+    }
 
-  var DEBUG_start_sending = process.hrtime();
+    var DEBUG_start_sending = process.hrtime();
 
-  Promise.each(_objects, function (x) { return sendObjectPositionFn(x); }).then(function () {
-    var elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-    console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
-  });
+    Promise.each(_objects, function (x) { return sendObjectPositionFn(x); }).then(function () {
+      var elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+    });
 
-  _time += 1/FPS;
-  // if (_time > 10000) {
-  //   _time = 0;
-  // }
-}, 1000/FPS);
+    _time += 1/FPS;
+    // if (_time > 10000) {
+    //   _time = 0;
+    // }
+  }, 1000/FPS);
+});
+
 
 //client.close();
 
@@ -120,8 +132,7 @@ server.on('listening', function () {
     console.log('UDP Server listening on ' + address.address + ":" + address.port);
 });
 
-// server.on('message', function (message, remote) {
-//     console.log(remote.address + ':' + remote.port +' - ' + message);
-// });
 
-// server.bind(PORT2, HOST);
+server.on('message', function (message, remote) {
+    console.log(remote.address + ':' + remote.port +' - ' + message);
+});
