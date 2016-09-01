@@ -151,7 +151,12 @@ public class NetManager : MonoBehaviour {
         int mostRecentNum = 0;
         NetMessage message;
         while (_running) {
-            int dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
+            int dataLength = 0;
+            try {
+                dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
+            } catch (System.Exception e) {
+                Debug.Log(e);
+            }
             if (DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 if (message.SequenceNumber > mostRecentNum) {
                     _writeMessageBuffer.Add(message);
@@ -163,11 +168,13 @@ public class NetManager : MonoBehaviour {
     }
 
     bool DecodeMessage (byte[] buffer, int dataLength, out NetMessage decodedMessage) {
-        int offset = 0;
-        var messageType = NetMessage.MessageTypeFromBuff(buffer, ref offset);
-        if (messageType == MessageType.Position && dataLength == 23) {
-            decodedMessage = NetMessage.DecodeObjectPos(buffer);
-            return true;
+        if (dataLength > 0) {
+            int offset = 0;
+            var messageType = NetMessage.MessageTypeFromBuff(buffer, ref offset);
+            if (messageType == MessageType.Position && dataLength == 23) {
+                decodedMessage = NetMessage.DecodeObjectPos(buffer);
+                return true;
+            }
         }
         decodedMessage = new NetMessage { MessageType = MessageType.Unknown };
         return false;

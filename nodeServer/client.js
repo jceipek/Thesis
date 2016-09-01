@@ -104,9 +104,13 @@ client.bind( function() {
       // pos.y = Math.sin(_time*0.1+objectId/2)*30;
       // pos.z = Math.cos(_time*0.1+objectId/2)*30;
 
-      pos.x = 0;//objectId * 2;
-      pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
-      pos.z = 0;
+      // pos.x = 0;//objectId * 2;
+      // pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
+      // pos.z = 0;
+
+      pos.x = _POS.x;
+      pos.y = _POS.y;
+      pos.z = _POS.z;
     }
 
     var DEBUG_start_sending = process.hrtime();
@@ -134,6 +138,14 @@ server.on('listening', function () {
 });
 
 
+var _POS = {x:0,y:0,z:0};
+
 server.on('message', function (message, remote) {
-    console.log(remote.address + ':' + remote.port +' - ' + message);
+  var data = { pos: {x: message.readFloatLE(0), y: message.readFloatLE(0+4), z: message.readFloatLE(0+4+4)}
+             , rot: {x: message.readFloatLE(0+4+4+4), y: message.readFloatLE(0+4+4+4+4), z: message.readFloatLE(0+4+4+4+4+4), w: message.readFloatLE(0+4+4+4+4+4+4)}
+             , grab: message.readUInt8(0+4+4+4+4+4+4+4)
+             }
+  _POS = data.pos;
+  console.log(data);
+    // console.log(remote.address + ':' + remote.port +' - ' + message);
 });
