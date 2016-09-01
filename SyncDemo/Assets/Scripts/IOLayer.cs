@@ -59,7 +59,8 @@ public class IOLayer : MonoBehaviour {
             controllerInfo.rotation = pose.rot;
 
              SteamVR_Controller.Device device = SteamVR_Controller.Input((int)trackedObject.index);
-             controllerInfo.grabbed = device.GetHairTrigger();
+            //  controllerInfo.grabbed = device.GetHairTrigger();
+             controllerInfo.grabbed = device.GetPress(SteamVR_Controller.ButtonMask.Trigger);
 
         }
         NetManager.G.SendControllerPositions(_controllerInfos[0].position, _controllerInfos[0].rotation, _controllerInfos[0].grabbed,
