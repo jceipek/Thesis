@@ -3,6 +3,7 @@ import * as DGRAM from 'dgram'
 import { Vector3, sqrDistance3D, distance3D, subtract3D, add3D } from './vector'
 
 interface Entity {
+  type: ENTITY_TYPE;
   id: number;
   pos: Vector3;
 }
@@ -23,6 +24,11 @@ const enum MESSAGE_TYPE {
 
 const enum VOLUME_TYPE {
   SPHERE
+}
+
+const enum ENTITY_TYPE {
+  DEFAULT = 0,
+  CLONER = 1
 }
 
 const PORT = 8053;
@@ -55,15 +61,13 @@ function fillBufferWithPosMsg (buf : Buffer, offset : number, msgType : MESSAGE_
   offset = buf.writeFloatLE(position.z, offset, true);
 }
 
-let _time = 0;
-
-const _sendBuffer = Buffer.allocUnsafe(23);
 
 let _latestEntityId = 0;
-function makeObjectFn (pos : Vector3) : Entity {
+function makeObjectFn (pos : Vector3, type : ENTITY_TYPE) : Entity {
   return <Entity>{
     pos: pos
   , id: _latestEntityId++
+  , type: type
   , interactionVolume: { type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 };
@@ -76,9 +80,6 @@ function makeControllerFn () {
          , pickedUpObject: null
          , pickedUpObjectOffset: {x: 0, y: 0, z: 0} };
 }
-
-
-const FPS = 90;
 
 // let triangleWave = function (t, halfPeriod) {
 //   return (2/halfPeriod) * (t - halfPeriod * (t/halfPeriod + 1/2)) * Math.pow(-1, (t/halfPeriod) + 1/2);
@@ -97,84 +98,85 @@ function doesControllerOverlapObject (controller, obj) {
                          , obj.pos, obj.interactionVolume);
 }
 
+let _interval = null;
+const _sendBuffer = Buffer.allocUnsafe(23);
+const FPS = 90;
+const STATE = { time: 0
+              , controllerData: {}
+              , entities: [ makeObjectFn({x:0,y:0.5,z:0}, ENTITY_TYPE.DEFAULT)
+                          , makeObjectFn({x:0,y:0.8,z:0}, ENTITY_TYPE.DEFAULT)
+                          , makeObjectFn({x:0,y:1,z:0}, ENTITY_TYPE.DEFAULT)
+                          , makeObjectFn({x:0,y:1.5,z:0}, ENTITY_TYPE.CLONER) ] };
 
-const STATE = { controllerData: {}, entities: [ makeObjectFn({x:0,y:0.5,z:0})
-                                              , makeObjectFn({x:0,y:0.8,z:0})
-                                              , makeObjectFn({x:0,y:1,z:0})
-                                              , makeObjectFn({x:0,y:1.5,z:0}) ] };
-// remote.address + ':' + remote.port
 
-// let _x = 0;
-// let _dir = 1;
-// let _gridSize = 0.1;
-let _interval;
-
-// NETWORK.bind(function() {
-NETWORK.bind(PORT, HOST, function() {
-  NETWORK.setBroadcast(true);
-  // NETWORK.setMulticastTTL(128);
-
-  _interval = setInterval(function() {
-
-    // let DEBUG_start = process.hrtime();
-
-    // _x += _dir*1/FPS;
-    // if (_x >= 1 || _x <= 0) {
-    //   _dir = -_dir;
-    // }
-
-    let objects = STATE.entities;
-    for (let objIndex = 0; objIndex < objects.length; objIndex++) {
-
-      for (let client in STATE.controllerData) {
-        if (STATE.controllerData.hasOwnProperty(client)) {
-          for (let controllerIndex = 0; controllerIndex < STATE.controllerData[client].length; controllerIndex++) {
-            let controller = STATE.controllerData[client][controllerIndex];
-            if (controller.grab.curr && !controller.grab.last && doesControllerOverlapObject(controller, objects[objIndex])) {
-              controller.pickedUpObject = objects[objIndex];
-              controller.pickedUpObjectOffset = subtract3D(objects[objIndex].pos, controller.pos);
-            }
-
-            if (!controller.grab.curr) {
-              controller.pickedUpObject = null;
-            } else if (controller.pickedUpObject != null) {
-              controller.pickedUpObject.pos = add3D(controller.pos, controller.pickedUpObjectOffset);
-            }
-          }
-        }
-      }
-
-      // pos.x = (Math.sin(_time*0.1+objectId/2*Math.cos(_time*0.1+objectId/2)))*30;//objectId * 2;
-      // pos.y = Math.sin(_time*0.1+objectId/2)*30;
-      // pos.z = Math.cos(_time*0.1+objectId/2)*30;
-
-      // pos.x = 0;//objectId * 2;
-      // pos.y = Math.floor((1.5+_x)/_gridSize)*_gridSize;// Math.sin(_time);
-      // pos.z = 0;
-
-      // pos.x = _POS.x;
-      // pos.y = _POS.y;
-      // pos.z = _POS.z;
+// TODO(JULIAN): Optimize, maybe with a spatial hash
+function getClosestEntityToPoint (pt : Vector3) : Entity | null {
+  const entities = STATE.entities;
+  let closest = null;
+  let sqrDistance = Infinity;
+  for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
+    let entity = entities[entityIndex];
+    let currSqrDist = sqrDistance3D(entity.pos, pt);
+    if (currSqrDist < sqrDistance) {
+      sqrDistance = currSqrDist; 
+      closest = entity;
     }
+  }
+  return closest;
+}
+
+
+NETWORK.bind(undefined, undefined, () => {
+  NETWORK.setBroadcast(true);
+  _interval = setInterval(() => {
 
     let DEBUG_start_sending = process.hrtime();
 
-    Promise.each(objects, (x) => { return sendObjectPositionFn(x); }).then(function () {
+    for (let client in STATE.controllerData) {
+      if (STATE.controllerData.hasOwnProperty(client)) {
+        for (let controllerIndex = 0; controllerIndex < STATE.controllerData[client].length; controllerIndex++) {
+          let controller = STATE.controllerData[client][controllerIndex];
+          if (controller.grab.curr && !controller.grab.last) {
+            let closestEntity = getClosestEntityToPoint(controller.pos);
+            if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
+              if (closestEntity.type == ENTITY_TYPE.CLONER) {
+                let clonedObject = makeObjectFn(closestEntity.pos, ENTITY_TYPE.DEFAULT);
+                console.log(clonedObject);
+                STATE.entities.push(clonedObject);
+                controller.pickedUpObject = clonedObject;
+                controller.pickedUpObjectOffset = subtract3D(clonedObject.pos, controller.pos);
+              } else {
+                controller.pickedUpObject = closestEntity;
+                controller.pickedUpObjectOffset = subtract3D(closestEntity.pos, controller.pos);
+              }
+            }
+          }
+
+          if (!controller.grab.curr) {
+            controller.pickedUpObject = null;
+          } else if (controller.pickedUpObject != null) {
+            controller.pickedUpObject.pos = add3D(controller.pos, controller.pickedUpObjectOffset);
+          }
+        }
+      }
+    }
+
+    Promise.each(STATE.entities, (entity) => { return sendObjectPositionFn(entity); }).then(() => {
       let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-      console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+      // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });
 
-    _time += 1/FPS;
+    STATE.time += 1/FPS;
   }, 1000/FPS);
 });
 
-NETWORK.on('listening', function () {
+NETWORK.on('listening', () => {
     let address = NETWORK.address();
     console.log('UDP Server listening on ' + address.address + ":" + address.port);
 });
 
 // Grab and store controller data
-NETWORK.on('message', function (message : Buffer, remote) {
+NETWORK.on('message', (message : Buffer, remote) => {
   let client = remote.address + ':' + remote.port;
   let controllerData = STATE.controllerData;
   if (!controllerData.hasOwnProperty(client)) {
@@ -206,9 +208,9 @@ NETWORK.on('message', function (message : Buffer, remote) {
   controllerData[client][1].grab.curr = message.readUInt8(offset+=4);
 });
 
-process.on('SIGINT', function () {
+process.on('SIGINT', () => {
   clearInterval(_interval);
-  setTimeout(function () {
+  setTimeout(() => {
     process.exit();
   }, 1000);
 });
