@@ -167,11 +167,11 @@ public class NetManager : MonoBehaviour {
         Debug.Log("Stopping Read Thread");
     }
 
-    bool DecodeMessage (byte[] buffer, int dataLength, out NetMessage decodedMessage) {
-        if (dataLength > 0) {
+    bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
+        if (messageLength > 0) {
             int offset = 0;
             var messageType = NetMessage.MessageTypeFromBuff(buffer, ref offset);
-            if (messageType == MessageType.Position && dataLength == 23) {
+            if (messageType == MessageType.Position && messageLength == 23) {
                 decodedMessage = NetMessage.DecodeObjectPos(buffer);
                 return true;
             }
