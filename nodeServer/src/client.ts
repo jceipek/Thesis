@@ -12,6 +12,7 @@ interface IEntity {
   type: ENTITY_TYPE;
   id: number;
   pos: IVector3;
+  rot: IQuaternion;
 }
 
 interface IInteractionVolume {
@@ -49,14 +50,22 @@ function sendObjectPosition (obj : IEntity, callback : () => (err: any, bytes: n
   sendFn(_sendBuffer, messageLength, callback);
 };
 
+function sendObjectPositionRotation (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
+  const messageLength = Protocol.fillBufferWithPositionRotationMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, obj.id, obj.pos, obj.rot);
+  _currSeqId++;
+  sendFn(_sendBuffer, messageLength, callback);
+};
+
 const sendObjectPositionFn = Promise.promisify(sendObjectPosition);
+const sendObjectPositionRotationFn = Promise.promisify(sendObjectPositionRotation);
 
 let _latestEntityId = 0;
-function makeEntityFn (pos : IVector3, type : ENTITY_TYPE) : IEntity {
+function makeEntityFn (pos : IVector3, rot: IQuaternion, type : ENTITY_TYPE) : IEntity {
   return <IEntity>{
     type: type
   , id: _latestEntityId++
   , pos: pos
+  , rot: rot
   , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 };
@@ -113,10 +122,10 @@ const _sendBuffer = Buffer.allocUnsafe(23);
 const FPS = 90;
 const STATE : IState = { time: 0
                        , controllerData: new Map<string,IController[]>()
-                       , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,0.8,0), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,1,0), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), ENTITY_TYPE.CLONER) ] };
+                       , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                   , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                   , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ] };
 
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
@@ -149,7 +158,7 @@ NETWORK.bind(undefined, undefined, () => {
             let closestEntity = getClosestEntityToPoint(controller.pos);
             if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
               if (closestEntity.type == ENTITY_TYPE.CLONER) {
-                let clonedObject = makeEntityFn(closestEntity.pos, ENTITY_TYPE.DEFAULT);
+                let clonedObject = makeEntityFn(closestEntity.pos, closestEntity.rot, ENTITY_TYPE.DEFAULT);
                 console.log(clonedObject);
                 STATE.entities.push(clonedObject);
                 controller.pickedUpObject = clonedObject;
@@ -169,7 +178,7 @@ NETWORK.bind(undefined, undefined, () => {
         }
     }
 
-    Promise.each(STATE.entities, (entity) => { return sendObjectPositionFn(entity); }).then(() => {
+    Promise.each(STATE.entities, (entity) => { return sendObjectPositionRotationFn(entity); }).then(() => {
       let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
       // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });

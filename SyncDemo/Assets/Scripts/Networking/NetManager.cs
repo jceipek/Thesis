@@ -114,6 +114,9 @@ public class NetManager : MonoBehaviour {
             case MessageType.Position:
                 _ioLayer.ProcessPositionMessage(message);
                 break;
+            case MessageType.PositionRotation:
+                _ioLayer.ProcessPositionRotationMessage(message);
+                break;
         }
     }
 

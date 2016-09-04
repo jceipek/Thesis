@@ -26,6 +26,17 @@ public class IOLayer : MonoBehaviour {
         }
     }
 
+    public void ProcessPositionRotationMessage (NetMessage message) {
+        if (message.ObjectId < _objects.Length) {
+            // Debug.Log("ID: "+message.ObjectId);
+            if (_objects[message.ObjectId] == null) {
+                _objects[message.ObjectId] = Instantiate(_objectPrefab);
+            }
+            _objects[message.ObjectId].transform.position = message.Position;
+            _objects[message.ObjectId].transform.rotation = message.Rotation;
+        }
+    }
+
     void OnEnable()
     {
         SteamVR_Utils.Event.Listen("new_poses", OnNewPoses);
