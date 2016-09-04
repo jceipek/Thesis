@@ -6,64 +6,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 
-public enum MessageType {
-    Unknown = -1,
-    Default = 0,
-    Position = 1
-}
-
-public struct NetMessage {
-        public MessageType MessageType;
-        public int SequenceNumber;
-        public ushort ObjectId;
-        public Vector3 Position;
-        // public Quaternion Rotation;
-        // public Vector3 Scale;
-
-        public static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
-            MessageType res = (MessageType)data[offset];
-            offset += 1;
-            return res;
-        }
-
-        public static ushort UShortFromBuff (byte[] data, ref int offset) {
-            ushort res = System.BitConverter.ToUInt16(data, offset);
-            offset += 2;
-            return res;
-        }
-
-        public static int IntFromBuff (byte[] data, ref int offset) {
-            int res = (data[offset+0] & 0xFF)
-                    | ((data[offset+1] & 0xFF) << 8) 
-                    | ((data[offset+2] & 0xFF) << 16) 
-                    | ((data[offset+3] & 0xFF) << 24);
-            offset += 4;
-            return res;
-        }
-
-        public static float FloatFromBuff (byte[] data, ref int offset) {
-            float res = System.BitConverter.ToSingle(data, offset);
-            offset += 4;
-            return res;
-        }
-
-        public static Vector3 V3FromBuff (byte[] data, ref int offset) {
-            float x = FloatFromBuff(data, ref offset);
-            float y = FloatFromBuff(data, ref offset);
-            float z = FloatFromBuff(data, ref offset);
-            return new Vector3(x, y, z);
-        }
-
-        public static NetMessage DecodeObjectPos (byte[] data) {
-            int offset = 0;
-            return new NetMessage { MessageType = MessageTypeFromBuff(data, ref offset),
-                                    SequenceNumber = IntFromBuff(data, ref offset),
-                                    ObjectId = UShortFromBuff(data, ref offset),
-                                    Position = V3FromBuff(data, ref offset) };
-        }
-
-    }
-
 public class NetManager : MonoBehaviour {
 
     public static NetManager G = null; 
@@ -157,7 +99,7 @@ public class NetManager : MonoBehaviour {
             } catch (System.Exception e) {
                 Debug.Log(e);
             }
-            if (DecodeMessage(_receiveBuffer, dataLength, out message)) {
+            if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 if (message.SequenceNumber > mostRecentNum) {
                     _writeMessageBuffer.Add(message);
                     mostRecentNum = message.SequenceNumber;
@@ -165,19 +107,6 @@ public class NetManager : MonoBehaviour {
             }
         }
         Debug.Log("Stopping Read Thread");
-    }
-
-    bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
-        if (messageLength > 0) {
-            int offset = 0;
-            var messageType = NetMessage.MessageTypeFromBuff(buffer, ref offset);
-            if (messageType == MessageType.Position && messageLength == 23) {
-                decodedMessage = NetMessage.DecodeObjectPos(buffer);
-                return true;
-            }
-        }
-        decodedMessage = new NetMessage { MessageType = MessageType.Unknown };
-        return false;
     }
 
     void ProcessMessage (NetMessage message) {
@@ -201,19 +130,19 @@ public class NetManager : MonoBehaviour {
         _sendBufferWriter.Write(position1.x);
         _sendBufferWriter.Write(position1.y);
         _sendBufferWriter.Write(position1.z);
+        _sendBufferWriter.Write(rotation1.w);
         _sendBufferWriter.Write(rotation1.x);
         _sendBufferWriter.Write(rotation1.y);
         _sendBufferWriter.Write(rotation1.z);
-        _sendBufferWriter.Write(rotation1.w);
         _sendBufferWriter.Write(grab1);
 
         _sendBufferWriter.Write(position2.x);
         _sendBufferWriter.Write(position2.y);
         _sendBufferWriter.Write(position2.z);
+        _sendBufferWriter.Write(rotation2.w);
         _sendBufferWriter.Write(rotation2.x);
         _sendBufferWriter.Write(rotation2.y);
         _sendBufferWriter.Write(rotation2.z);
-        _sendBufferWriter.Write(rotation2.w);
         _sendBufferWriter.Write(grab2);
 
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
