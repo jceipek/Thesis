@@ -38,7 +38,7 @@ public class LineSegment : MonoBehaviour, ISegmentsProvider {
 
 
 	public void SetColor (Color32 color) {
-		if (_material != null) {
+		if (_material == null) {
 			_material = new Material(_meshRenderer.material);
 			_meshRenderer.material = _material;
 		}
