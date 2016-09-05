@@ -57,7 +57,7 @@ public class IOLayer : MonoBehaviour {
         if (message.ObjectId < _objects.Length) {
             // Debug.Log("ID: "+message.ObjectId);
             if (_lineSegments[message.ObjectId] == null) {
-                _lineSegments[message.ObjectId] = Instantiate(_lineSegmentPrefab).GetComponent<LineSegment>();
+                _lineSegments[message.ObjectId] = (Instantiate(_lineSegmentPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<LineSegment>();
             }
             _lineSegments[message.ObjectId].StartPoint = message.Position;
             _lineSegments[message.ObjectId].EndPoint = message.Destination;

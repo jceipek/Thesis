@@ -154,8 +154,7 @@ const STATE : IState = { time: 0
                                    , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
                        , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF]))
                                    , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF]))
-                                                                                                                                //a   
-                                   , makeSegmentFn(Vec3.fromValues(0,0.5,0), Vec3.fromValues(0,1.5,0), new Uint8Array([0x00,0xFF,0xFF,0x00]))] };
+                                   , makeSegmentFn(Vec3.fromValues(0,0.5,0), Vec3.fromValues(0,1.5,0), new Uint8Array([0x00,0xFF,0x00,0xFF]))] };
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
 function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
