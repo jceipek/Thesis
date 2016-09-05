@@ -118,7 +118,7 @@ interface IState {
 }
 
 let _interval : null|NodeJS.Timer = null;
-const _sendBuffer = Buffer.allocUnsafe(23);
+const _sendBuffer = Buffer.allocUnsafe(1024);
 const FPS = 90;
 const STATE : IState = { time: 0
                        , controllerData: new Map<string,IController[]>()
@@ -158,7 +158,7 @@ NETWORK.bind(undefined, undefined, () => {
             let closestEntity = getClosestEntityToPoint(controller.pos);
             if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
               if (closestEntity.type == ENTITY_TYPE.CLONER) {
-                let clonedObject = makeEntityFn(closestEntity.pos, closestEntity.rot, ENTITY_TYPE.DEFAULT);
+                let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), ENTITY_TYPE.DEFAULT);
                 console.log(clonedObject);
                 STATE.entities.push(clonedObject);
                 controller.pickedUpObject = clonedObject;
@@ -202,31 +202,31 @@ NETWORK.on('message', (message : Buffer, remote) => {
                                ]);
   }
 
-  controllerData[client][0].grab.last = controllerData[client][0].grab.curr;
-  controllerData[client][1].grab.last = controllerData[client][1].grab.curr;
+  controllerData.get(client)[0].grab.last = controllerData.get(client)[0].grab.curr;
+  controllerData.get(client)[1].grab.last = controllerData.get(client)[1].grab.curr;
 
   let offset = 0;
-  Vec3.set(/*out*/controllerData[client][0].pos
+  Vec3.set(/*out*/controllerData.get(client)[0].pos
           , message.readFloatLE(offset)
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4));
-  Quat.set(/*out*/controllerData[client][0].rot
+  Quat.set(/*out*/controllerData.get(client)[0].rot
           , message.readFloatLE(offset+=4) // w
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4));
-  controllerData[client][0].grab.curr = <0|1>message.readUInt8(offset+=4);
+  controllerData.get(client)[0].grab.curr = <0|1>message.readUInt8(offset+=4);
 
-  Vec3.set(/*out*/controllerData[client][1].pos
+  Vec3.set(/*out*/controllerData.get(client)[1].pos
           , message.readFloatLE(offset+=1)
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4));
-  Quat.set(/*out*/controllerData[client][1].rot
+  Quat.set(/*out*/controllerData.get(client)[1].rot
           , message.readFloatLE(offset+=4) // w
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4)
           , message.readFloatLE(offset+=4));
-  controllerData[client][1].grab.curr = <0|1>message.readUInt8(offset+=4);
+  controllerData.get(client)[1].grab.curr = <0|1>message.readUInt8(offset+=4);
 });
 
 process.on('SIGINT', () => {
