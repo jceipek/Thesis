@@ -2,11 +2,13 @@ import { vec3 as Vec3, quat as Quat, GLM } from "gl-matrix"
 
 type IVector3 = GLM.IArray;
 type IQuaternion = GLM.IArray;
+type IColor = Uint8Array;
 
 export const enum MESSAGE_TYPE {
   Unknown = -1,
   Position = 0X00,
-  PositionRotation = 0X01
+  PositionRotation = 0X01,
+  Segment = 0X02
 }
 
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
@@ -30,6 +32,23 @@ export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number
   offset = buf.writeFloatLE(rot[1], offset, true);
   offset = buf.writeFloatLE(rot[2], offset, true);
   offset = buf.writeFloatLE(rot[3], offset, true);
+  return offset;
+}
+
+export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3, dest : IVector3, color : IColor) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  offset = buf.writeUInt16LE(objectId, offset, true);
+  offset = buf.writeFloatLE(pos[0], offset, true);
+  offset = buf.writeFloatLE(pos[1], offset, true);
+  offset = buf.writeFloatLE(pos[2], offset, true);
+  offset = buf.writeFloatLE(dest[0], offset, true);
+  offset = buf.writeFloatLE(dest[1], offset, true);
+  offset = buf.writeFloatLE(dest[2], offset, true);
+  offset = buf.writeInt8(color[0], offset, true);
+  offset = buf.writeInt8(color[1], offset, true);
+  offset = buf.writeInt8(color[2], offset, true);
+  offset = buf.writeInt8(color[3], offset, true);
   return offset;
 }
 

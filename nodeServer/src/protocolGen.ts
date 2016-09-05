@@ -29,28 +29,43 @@ const TYPE_INFO = {
 , 'UInt16': {js: 'number', cs: 'ushort', len: 2}
 , 'Vector3': {js: 'IVector3', cs: 'Vector3', len: 4*3}
 , 'Quaternion': {js: 'IQuaternion', cs: 'Quaternion', len: 4*4}
+, 'Color': {js: 'IColor', cs: 'Color32', len: 4}
 }
 
 const MESSAGE_TYPE_IDENT = {cs: 'MessageType', js: 'messageType'}
 const SEQUENCE_NUMBER_IDENT = {cs: 'SequenceNumber', js: 'sequenceNumber'}
 const OBJECTID_IDENT = {cs: 'ObjectId', js: 'objectId'}
 const POSITION_IDENT = {cs: 'Position', js: 'pos'}
+const DESTINATION_IDENT = {cs: 'Destination', js: 'dest'}
 const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
+const COLOR_IDENT = {cs: 'Color', js: 'color'}
 
-const positionMessage : IMessage = { name: 'Position', fields: [
-  {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-, {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
-, {ident: OBJECTID_IDENT, customType: 'UInt16'}
-, {ident: POSITION_IDENT, customType: 'Vector3'}
-] };
-
-const positionRotationMessage : IMessage = { name: 'PositionRotation', fields: [
-  {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-, {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
-, {ident: OBJECTID_IDENT, customType: 'UInt16'}
-, {ident: POSITION_IDENT, customType: 'Vector3'}
-, {ident: ROTATION_IDENT, customType: 'Quaternion'}
-] };
+const MESSAGES : IMessage[] = [
+  { name: 'Position'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            ]
+  }
+, { name: 'PositionRotation'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            ]
+  }
+, { name: 'Segment'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            , {ident: DESTINATION_IDENT, customType: 'Vector3'}
+            , {ident: COLOR_IDENT, customType: 'Color'}
+            ]
+  }
+];
 
 function jsWriteForType (type: string, identifier: string) {
   let output = "";
@@ -68,6 +83,12 @@ function jsWriteForType (type: string, identifier: string) {
       output += `  offset = buf.writeFloatLE(${identifier}[1], offset, true);\n` // x
       output += `  offset = buf.writeFloatLE(${identifier}[2], offset, true);\n` // y
       output += `  offset = buf.writeFloatLE(${identifier}[3], offset, true);\n` // z
+      break;
+    case 'Color':
+      output += `  offset = buf.writeInt8(${identifier}[0], offset, true);\n` // x
+      output += `  offset = buf.writeInt8(${identifier}[1], offset, true);\n` // y
+      output += `  offset = buf.writeInt8(${identifier}[2], offset, true);\n` // z
+      output += `  offset = buf.writeInt8(${identifier}[3], offset, true);\n` // z
       break;
     default:
       output += `  offset = buf.write${type}LE(${identifier}, offset, true);\n`
@@ -97,7 +118,8 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   let output = `import { vec3 as Vec3, quat as Quat, GLM } from "gl-matrix"\n\n`
 
   output += `type IVector3 = GLM.IArray;\n`;
-  output += `type IQuaternion = GLM.IArray;\n\n`;
+  output += `type IQuaternion = GLM.IArray;\n`;
+  output += `type IColor = Uint8Array;\n\n`;
 
   output += "export const enum MESSAGE_TYPE {\n";
   output += "  Unknown = -1,\n";
@@ -143,13 +165,13 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t\treturn res;
   \t}
 
-  \tstatic float FloatFromBuff(byte[] data, ref int offset) {
+  \tstatic float FloatFromBuff (byte[] data, ref int offset) {
   \t\tfloat res = System.BitConverter.ToSingle(data, offset);
   \t\toffset += 4;
   \t\treturn res;
   \t}
 
-  \tstatic int Int32FromBuff(byte[] data, ref int offset) {
+  \tstatic int Int32FromBuff (byte[] data, ref int offset) {
   \t\tint res = (data[offset+0] & 0xFF)
   \t\t        | ((data[offset+1] & 0xFF) << 8) 
   \t\t        | ((data[offset+2] & 0xFF) << 16) 
@@ -158,20 +180,24 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t\treturn res;
   \t}
 
-  \tstatic ushort UInt16FromBuff(byte[] data, ref int offset) {
+  \tstatic ushort UInt16FromBuff (byte[] data, ref int offset) {
   \t\tushort res = System.BitConverter.ToUInt16(data, offset);
   \t\toffset += 2;
   \t\treturn res;
   \t}
 
-  \tstatic Vector3 Vector3FromBuff(byte[] data, ref int offset) {
+  \tstatic Vector3 Vector3FromBuff (byte[] data, ref int offset) {
   \t\tfloat x = FloatFromBuff(data, ref offset);
   \t\tfloat y = FloatFromBuff(data, ref offset);
   \t\tfloat z = FloatFromBuff(data, ref offset);
   \t\treturn new Vector3(x, y, z);
   \t}
 
-  \tstatic Quaternion QuaternionFromBuff(byte[] data, ref int offset) {
+  \tstatic Color32 ColorFromBuff (byte[] data, ref int offset) {
+  \t\treturn new Color32(data[offset], data[offset++], data[offset++], data[offset++]);
+  \t}
+
+  \tstatic Quaternion QuaternionFromBuff (byte[] data, ref int offset) {
   \t\tfloat w = FloatFromBuff(data, ref offset);
   \t\tfloat x = FloatFromBuff(data, ref offset);
   \t\tfloat y = FloatFromBuff(data, ref offset);
@@ -211,7 +237,7 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
 
 
 FS.writeFile("../../SyncDemo/Assets/Scripts/Networking/Protocol.cs"
-            , csCreateProtocolFromMessages([positionMessage, positionRotationMessage])
+            , csCreateProtocolFromMessages(MESSAGES)
             , (err) => {
               if(err) {
                 return console.log(err);
@@ -220,7 +246,7 @@ FS.writeFile("../../SyncDemo/Assets/Scripts/Networking/Protocol.cs"
 });
 
 FS.writeFile("../src/protocol.ts"
-            , jsCreateProtocolFromMessages([positionMessage, positionRotationMessage])
+            , jsCreateProtocolFromMessages(MESSAGES)
             , (err) => {
               if(err) {
                 return console.log(err);
@@ -233,6 +259,6 @@ FS.writeFile("../src/protocol.ts"
 // console.log("-----------------------CS-----------------------");
 // console.log(csReadForMessage(positionMessage));
 // console.log("-----------------------CS-----------------------");
-// console.log(csCreateProtocolFromMessages([positionMessage, positionRotationMessage]));
+// console.log(csCreateProtocolFromMessages(MESSAGES));
 // console.log("-----------------------JS-----------------------");
-// console.log(jsCreateProtocolFromMessages([positionMessage, positionRotationMessage]));
+// console.log(jsCreateProtocolFromMessages(MESSAGES));

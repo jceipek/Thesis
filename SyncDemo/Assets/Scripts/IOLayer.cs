@@ -12,11 +12,27 @@ public class IOLayer : MonoBehaviour {
     }
 
     [SerializeField] GameObject _objectPrefab;
+    [SerializeField] GameObject _lineSegmentPrefab;
     GameObject[] _objects = new GameObject[1000];
+    LineSegment[] _lineSegments = new LineSegment[1000]; 
 
     [SerializeField] ControllerInfo[] _controllerInfos;
 
-    public void ProcessPositionMessage (NetMessage message) {
+    public void ProcessMessage (NetMessage message) {
+        switch (message.MessageType) {
+            case MessageType.Position:
+                ProcessPositionMessage(message);
+                break;
+            case MessageType.PositionRotation:
+                ProcessPositionRotationMessage(message);
+                break;
+            case MessageType.Segment:
+                ProcessSegmentMessage(message);
+                break;
+        }
+    }
+
+    void ProcessPositionMessage (NetMessage message) {
         if (message.ObjectId < _objects.Length) {
             // Debug.Log("ID: "+message.ObjectId);
             if (_objects[message.ObjectId] == null) {
@@ -26,7 +42,7 @@ public class IOLayer : MonoBehaviour {
         }
     }
 
-    public void ProcessPositionRotationMessage (NetMessage message) {
+    void ProcessPositionRotationMessage (NetMessage message) {
         if (message.ObjectId < _objects.Length) {
             // Debug.Log("ID: "+message.ObjectId);
             if (_objects[message.ObjectId] == null) {
@@ -34,6 +50,18 @@ public class IOLayer : MonoBehaviour {
             }
             _objects[message.ObjectId].transform.position = message.Position;
             _objects[message.ObjectId].transform.rotation = message.Rotation;
+        }
+    }
+
+    void ProcessSegmentMessage (NetMessage message) {
+        if (message.ObjectId < _objects.Length) {
+            // Debug.Log("ID: "+message.ObjectId);
+            if (_lineSegments[message.ObjectId] == null) {
+                _lineSegments[message.ObjectId] = Instantiate(_lineSegmentPrefab).GetComponent<LineSegment>();
+            }
+            _lineSegments[message.ObjectId].StartPoint = message.Position;
+            _lineSegments[message.ObjectId].EndPoint = message.Destination;
+            _lineSegments[message.ObjectId].SetColor(message.Color);
         }
     }
 

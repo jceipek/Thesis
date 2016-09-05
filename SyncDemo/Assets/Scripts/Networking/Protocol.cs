@@ -4,7 +4,8 @@ using UnityEngine;
 public enum MessageType {
   Unknown = -1,
   Position = 0X00,
-  PositionRotation = 0X01
+  PositionRotation = 0X01,
+  Segment = 0X02
 }
 
 public struct NetMessage {
@@ -13,19 +14,21 @@ public struct NetMessage {
 	public ushort ObjectId;
 	public Vector3 Position;
 	public Quaternion Rotation;
+	public Vector3 Destination;
+	public Color32 Color;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
   		return res;
   	}
 
-  	static float FloatFromBuff(byte[] data, ref int offset) {
+  	static float FloatFromBuff (byte[] data, ref int offset) {
   		float res = System.BitConverter.ToSingle(data, offset);
   		offset += 4;
   		return res;
   	}
 
-  	static int Int32FromBuff(byte[] data, ref int offset) {
+  	static int Int32FromBuff (byte[] data, ref int offset) {
   		int res = (data[offset+0] & 0xFF)
   		        | ((data[offset+1] & 0xFF) << 8) 
   		        | ((data[offset+2] & 0xFF) << 16) 
@@ -34,20 +37,24 @@ public struct NetMessage {
   		return res;
   	}
 
-  	static ushort UInt16FromBuff(byte[] data, ref int offset) {
+  	static ushort UInt16FromBuff (byte[] data, ref int offset) {
   		ushort res = System.BitConverter.ToUInt16(data, offset);
   		offset += 2;
   		return res;
   	}
 
-  	static Vector3 Vector3FromBuff(byte[] data, ref int offset) {
+  	static Vector3 Vector3FromBuff (byte[] data, ref int offset) {
   		float x = FloatFromBuff(data, ref offset);
   		float y = FloatFromBuff(data, ref offset);
   		float z = FloatFromBuff(data, ref offset);
   		return new Vector3(x, y, z);
   	}
 
-  	static Quaternion QuaternionFromBuff(byte[] data, ref int offset) {
+  	static Color32 ColorFromBuff (byte[] data, ref int offset) {
+  		return new Color32(data[offset], data[offset++], data[offset++], data[offset++]);
+  	}
+
+  	static Quaternion QuaternionFromBuff (byte[] data, ref int offset) {
   		float w = FloatFromBuff(data, ref offset);
   		float x = FloatFromBuff(data, ref offset);
   		float y = FloatFromBuff(data, ref offset);
@@ -70,6 +77,15 @@ public struct NetMessage {
 		                        Rotation = QuaternionFromBuff(data, ref offset) };
 	}
 
+	private static NetMessage DecodeSegment (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.Segment,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        ObjectId = UInt16FromBuff(data, ref offset),
+		                        Position = Vector3FromBuff(data, ref offset),
+		                        Destination = Vector3FromBuff(data, ref offset),
+		                        Color = ColorFromBuff(data, ref offset) };
+	}
+
 	public static bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
 		if (messageLength > 0) {
 			int offset = 0;
@@ -84,6 +100,12 @@ public struct NetMessage {
   				case MessageType.PositionRotation:
   					if (messageLength == 35) {
   						decodedMessage = DecodePositionRotation(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.Segment:
+  					if (messageLength == 35) {
+  						decodedMessage = DecodeSegment(buffer, ref offset);
   						return true;
   					}
   					break;

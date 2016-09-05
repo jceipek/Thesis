@@ -6,13 +6,20 @@ import { vec3 as Vec3, quat as Quat, GLM } from 'gl-matrix'
 
 type IVector3 = GLM.IArray;
 type IQuaternion = GLM.IArray;
-
+type IColor = Uint8Array;
 
 interface IEntity {
   type: ENTITY_TYPE;
   id: number;
   pos: IVector3;
   rot: IQuaternion;
+}
+
+interface ISegment {
+  id: number;
+  start: IVector3;
+  end: IVector3;
+  color: IColor;
 }
 
 interface IInteractionVolume {
@@ -41,23 +48,30 @@ const NETWORK = DGRAM.createSocket('udp4');
 
 function sendFn (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
-};
+}
 
 let _currSeqId = 0;
-function sendObjectPosition (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
+function sendEntityPosition (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionMsg(_sendBuffer, 0, MESSAGE_TYPE.Position, _currSeqId, obj.id, obj.pos);
   _currSeqId++;
   sendFn(_sendBuffer, messageLength, callback);
-};
+}
 
-function sendObjectPositionRotation (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, obj.id, obj.pos, obj.rot);
+function sendEntityPositionRotation (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
+  const messageLength = Protocol.fillBufferWithPositionRotationMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, entity.id, entity.pos, entity.rot);
   _currSeqId++;
   sendFn(_sendBuffer, messageLength, callback);
-};
+}
 
-const sendObjectPositionFn = Promise.promisify(sendObjectPosition);
-const sendObjectPositionRotationFn = Promise.promisify(sendObjectPositionRotation);
+function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
+  const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
+  _currSeqId++;
+  sendFn(_sendBuffer, messageLength, callback);
+}
+
+const sendEntityPositionFn = Promise.promisify(sendEntityPosition);
+const sendEntityPositionRotationFn = Promise.promisify(sendEntityPositionRotation);
+const sendSegmentFn = Promise.promisify(sendSegment);
 
 let _latestEntityId = 0;
 function makeEntityFn (pos : IVector3, rot: IQuaternion, type : ENTITY_TYPE) : IEntity {
@@ -68,7 +82,16 @@ function makeEntityFn (pos : IVector3, rot: IQuaternion, type : ENTITY_TYPE) : I
   , rot: rot
   , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
-};
+}
+
+function makeSegmentFn (start : IVector3, end : IVector3, color: IColor) : ISegment {
+  return {
+    id: _latestEntityId++
+  , start: start
+  , end: end
+  , color: color
+  };
+}
 
 interface IGrabState {
   curr: 0|1;
@@ -82,6 +105,7 @@ interface IController {
    grab: IGrabState;
    pickedUpObject: IEntity|null;
    pickedUpObjectOffset: IVector3;
+   pickedUpObjectRotOffset: IVector3;
 }
 
 function makeControllerFn () : IController {
@@ -90,7 +114,8 @@ function makeControllerFn () : IController {
          , rot: Quat.create()
          , grab: { curr: 0, last: 0 }
          , pickedUpObject: null
-         , pickedUpObjectOffset: Vec3.create() };
+         , pickedUpObjectOffset: Vec3.create()
+         , pickedUpObjectRotOffset: Quat.create() };
 }
 
 // let triangleWave = function (t, halfPeriod) {
@@ -115,6 +140,7 @@ interface IState {
   time: number;
   controllerData: Map<string,IController[]>;
   entities: IEntity[]
+  segments: ISegment[]
 }
 
 let _interval : null|NodeJS.Timer = null;
@@ -125,8 +151,9 @@ const STATE : IState = { time: 0
                        , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), ENTITY_TYPE.DEFAULT)
                                    , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
                                    , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ] };
-
+                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
+                       , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF]))
+                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF]))] };
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
 function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
@@ -144,6 +171,22 @@ function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
   return closest;
 }
 
+function pickUpEntityWithController (entity: IEntity, controller: IController) {
+  controller.pickedUpObject = entity;
+  Vec3.transformQuat(/*out*/controller.pickedUpObjectOffset
+                    , Vec3.sub(/*out*/controller.pickedUpObjectOffset
+                              , entity.pos, controller.pos)
+                    , Quat.invert(/*out*/controller.pickedUpObjectRotOffset
+                                    , controller.rot));
+
+  Quat.mul(/*out*/controller.pickedUpObjectRotOffset
+          , entity.rot, Quat.invert(/*out*/controller.pickedUpObjectRotOffset
+                                      , controller.rot));
+}
+
+
+const _tempQuat = Quat.create();
+const _tempVec = Vec3.create();
 
 NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
@@ -161,11 +204,9 @@ NETWORK.bind(undefined, undefined, () => {
                 let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), ENTITY_TYPE.DEFAULT);
                 console.log(clonedObject);
                 STATE.entities.push(clonedObject);
-                controller.pickedUpObject = clonedObject;
-                Vec3.sub(/*out*/controller.pickedUpObjectOffset, clonedObject.pos, controller.pos);
+                pickUpEntityWithController(clonedObject, controller);
               } else {
-                controller.pickedUpObject = closestEntity;
-                Vec3.sub(/*out*/controller.pickedUpObjectOffset, closestEntity.pos, controller.pos);
+                pickUpEntityWithController(closestEntity, controller);
               }
             }
           }
@@ -173,13 +214,26 @@ NETWORK.bind(undefined, undefined, () => {
           if (!controller.grab.curr) {
             controller.pickedUpObject = null;
           } else if (controller.pickedUpObject != null) {
-            Vec3.add(/*out*/controller.pickedUpObject.pos, controller.pos, controller.pickedUpObjectOffset);
+            Vec3.copy(STATE.segments[0].start, controller.pos);
+            Vec3.add(STATE.segments[0].end, controller.pickedUpObjectOffset, controller.pos);
+
+            Vec3.add(/*out*/controller.pickedUpObject.pos
+                    , controller.pos, Vec3.transformQuat(/*out*/controller.pickedUpObject.pos
+                                                        , controller.pickedUpObjectOffset, controller.rot));
+
+            Vec3.copy(STATE.segments[1].start, controller.pos);
+            Vec3.copy(STATE.segments[1].end, controller.pickedUpObject.pos);
+
+            Quat.mul(/*out*/controller.pickedUpObject.rot, controller.pickedUpObjectRotOffset, controller.rot);
           }
         }
     }
 
-    Promise.each(STATE.entities, (entity) => { return sendObjectPositionRotationFn(entity); }).then(() => {
-      let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+    Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationFn(entity); }).then(() => {
+      // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+        let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      });
       // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });
 
@@ -197,6 +251,7 @@ NETWORK.on('message', (message : Buffer, remote) => {
   let client = remote.address + ':' + remote.port;
   let controllerData = STATE.controllerData;
   if (!controllerData.has(client)) {
+    console.log("HI!");
     controllerData.set(client, [ makeControllerFn()
                                , makeControllerFn()
                                ]);

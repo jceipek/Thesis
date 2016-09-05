@@ -77,7 +77,7 @@ public class NetManager : MonoBehaviour {
     void Update () {
         _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
         for (int i = 0; i < _readMessageBuffer.Count; i++) {
-            ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
+            _ioLayer.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
             // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
         }
         _readMessageBuffer.Count = 0;
@@ -107,17 +107,6 @@ public class NetManager : MonoBehaviour {
             }
         }
         Debug.Log("Stopping Read Thread");
-    }
-
-    void ProcessMessage (NetMessage message) {
-        switch (message.MessageType) {
-            case MessageType.Position:
-                _ioLayer.ProcessPositionMessage(message);
-                break;
-            case MessageType.PositionRotation:
-                _ioLayer.ProcessPositionRotationMessage(message);
-                break;
-        }
     }
 
     void SendStringMessage (string message) {
