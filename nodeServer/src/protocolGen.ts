@@ -85,10 +85,10 @@ function jsWriteForType (type: string, identifier: string) {
       output += `  offset = buf.writeFloatLE(${identifier}[3], offset, true);\n` // z
       break;
     case 'Color':
-      output += `  offset = buf.writeInt8(${identifier}[0], offset, true);\n` // x
-      output += `  offset = buf.writeInt8(${identifier}[1], offset, true);\n` // y
-      output += `  offset = buf.writeInt8(${identifier}[2], offset, true);\n` // z
-      output += `  offset = buf.writeInt8(${identifier}[3], offset, true);\n` // z
+      output += `  offset = buf.writeUInt8(${identifier}[0], offset, true);\n` // x
+      output += `  offset = buf.writeUInt8(${identifier}[1], offset, true);\n` // y
+      output += `  offset = buf.writeUInt8(${identifier}[2], offset, true);\n` // z
+      output += `  offset = buf.writeUInt8(${identifier}[3], offset, true);\n` // z
       break;
     default:
       output += `  offset = buf.write${type}LE(${identifier}, offset, true);\n`
@@ -194,7 +194,12 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t}
 
   \tstatic Color32 ColorFromBuff (byte[] data, ref int offset) {
-  \t\treturn new Color32(data[offset], data[offset++], data[offset++], data[offset++]);
+  \t\tbyte r = data[offset];
+  \t\tbyte g = data[offset+1];
+  \t\tbyte b = data[offset+2];
+  \t\tbyte a = data[offset+3];
+  \t\toffset += 4;
+  \t\treturn new Color32(r,g,b,a);
   \t}
 
   \tstatic Quaternion QuaternionFromBuff (byte[] data, ref int offset) {

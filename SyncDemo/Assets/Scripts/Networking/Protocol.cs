@@ -51,7 +51,12 @@ public struct NetMessage {
   	}
 
   	static Color32 ColorFromBuff (byte[] data, ref int offset) {
-  		return new Color32(data[offset], data[offset++], data[offset++], data[offset++]);
+  		byte r = data[offset];
+  		byte g = data[offset+1];
+  		byte b = data[offset+2];
+  		byte a = data[offset+3];
+  		offset += 4;
+  		return new Color32(r,g,b,a);
   	}
 
   	static Quaternion QuaternionFromBuff (byte[] data, ref int offset) {

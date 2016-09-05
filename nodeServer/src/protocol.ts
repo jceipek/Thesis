@@ -45,10 +45,10 @@ export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, message
   offset = buf.writeFloatLE(dest[0], offset, true);
   offset = buf.writeFloatLE(dest[1], offset, true);
   offset = buf.writeFloatLE(dest[2], offset, true);
-  offset = buf.writeInt8(color[0], offset, true);
-  offset = buf.writeInt8(color[1], offset, true);
-  offset = buf.writeInt8(color[2], offset, true);
-  offset = buf.writeInt8(color[3], offset, true);
+  offset = buf.writeUInt8(color[0], offset, true);
+  offset = buf.writeUInt8(color[1], offset, true);
+  offset = buf.writeUInt8(color[2], offset, true);
+  offset = buf.writeUInt8(color[3], offset, true);
   return offset;
 }
 
