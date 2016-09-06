@@ -122,19 +122,19 @@ public class NetManager : MonoBehaviour {
         _sendBufferWriter.Write(position1.x);
         _sendBufferWriter.Write(position1.y);
         _sendBufferWriter.Write(position1.z);
-        _sendBufferWriter.Write(rotation1.w);
         _sendBufferWriter.Write(rotation1.x);
         _sendBufferWriter.Write(rotation1.y);
         _sendBufferWriter.Write(rotation1.z);
+        _sendBufferWriter.Write(rotation1.w);
         _sendBufferWriter.Write(grab1);
 
         _sendBufferWriter.Write(position2.x);
         _sendBufferWriter.Write(position2.y);
         _sendBufferWriter.Write(position2.z);
-        _sendBufferWriter.Write(rotation2.w);
         _sendBufferWriter.Write(rotation2.x);
         _sendBufferWriter.Write(rotation2.y);
         _sendBufferWriter.Write(rotation2.z);
+        _sendBufferWriter.Write(rotation2.w);
         _sendBufferWriter.Write(grab2);
 
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
