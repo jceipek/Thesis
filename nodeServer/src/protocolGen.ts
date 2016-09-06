@@ -203,11 +203,11 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t}
 
   \tstatic Quaternion QuaternionFromBuff (byte[] data, ref int offset) {
-  \t\tfloat w = FloatFromBuff(data, ref offset);
   \t\tfloat x = FloatFromBuff(data, ref offset);
   \t\tfloat y = FloatFromBuff(data, ref offset);
   \t\tfloat z = FloatFromBuff(data, ref offset);
-  \t\treturn new Quaternion(x, y, z, w); // NOTE(JULIAN): w comes first in the buffer but last in the constructor
+  \t\tfloat w = FloatFromBuff(data, ref offset);
+  \t\treturn new Quaternion(x, y, z, w);
   \t}\n\n`;
 
   output += messages.map((message) => csReadForMessage(message)).join('\n')+'\n';

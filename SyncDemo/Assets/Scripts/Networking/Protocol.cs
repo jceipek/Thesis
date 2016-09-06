@@ -60,10 +60,10 @@ public struct NetMessage {
   	}
 
   	static Quaternion QuaternionFromBuff (byte[] data, ref int offset) {
-  		float w = FloatFromBuff(data, ref offset);
   		float x = FloatFromBuff(data, ref offset);
   		float y = FloatFromBuff(data, ref offset);
   		float z = FloatFromBuff(data, ref offset);
+  		float w = FloatFromBuff(data, ref offset);
   		return new Quaternion(x, y, z, w); // NOTE(JULIAN): w comes first in the buffer but last in the constructor
   	}
 
