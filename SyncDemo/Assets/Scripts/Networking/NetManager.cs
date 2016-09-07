@@ -97,7 +97,7 @@ public class NetManager : MonoBehaviour {
     }
 
     void Reader () {
-        int mostRecentNum = 0;
+        // int mostRecentNum = 0;
         NetMessage message;
         while (_running) {
             int dataLength = 0;
@@ -115,7 +115,7 @@ public class NetManager : MonoBehaviour {
             if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 // if (message.SequenceNumber > mostRecentNum) {
                     _writeMessageBuffer.Add(message);
-                    mostRecentNum = message.SequenceNumber;
+                    // mostRecentNum = message.SequenceNumber;
                 // }
             } else if (dataLength > 0) {
                 Debug.Log("Undecodable");
