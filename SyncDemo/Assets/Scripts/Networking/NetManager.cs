@@ -102,27 +102,23 @@ public class NetManager : MonoBehaviour {
         NetMessage message;
         while (_running) {
             int dataLength = 0;
-            int available = 0;
             try {
-                available = _clientSock.Available;
-                _debug = available;
-
-            if (available > 0) {
-                    dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
-                    // Debug.Log(e);
-                // }
-                if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
-                    // if (message.SequenceNumber > mostRecentNum) {
-                        _writeMessageBuffer.Add(message);
-                        mostRecentNum = message.SequenceNumber;
-                    // }
-                } else {
-                    Debug.Log("Undecodable");
-                }
-            }
-
-                } catch (System.Exception e) {
+                dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
+            } catch (System.Net.Sockets.SocketException e) {
+                Debug.Log(e.SocketErrorCode);
+                // System.Net.Sockets.SocketError.
+            } catch (System.Exception e) {
                 Debug.Log(e);
+            }
+                // Debug.Log(e);
+            // }
+            if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
+                // if (message.SequenceNumber > mostRecentNum) {
+                    _writeMessageBuffer.Add(message);
+                    mostRecentNum = message.SequenceNumber;
+                // }
+            } else {
+                Debug.Log("Undecodable");
             }
         }
         Debug.Log("Stopping Read Thread");
