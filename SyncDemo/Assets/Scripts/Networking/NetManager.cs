@@ -106,9 +106,7 @@ public class NetManager : MonoBehaviour {
             try {
                 available = _clientSock.Available;
                 _debug = available;
-            } catch (System.Exception e) {
-                Debug.Log(e);
-            }
+
             if (available > 0) {
                     dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
                     // Debug.Log(e);
@@ -121,6 +119,10 @@ public class NetManager : MonoBehaviour {
                 } else {
                     Debug.Log("Undecodable");
                 }
+            }
+
+                } catch (System.Exception e) {
+                Debug.Log(e);
             }
         }
         Debug.Log("Stopping Read Thread");
