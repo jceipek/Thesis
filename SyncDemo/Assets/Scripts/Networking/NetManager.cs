@@ -105,13 +105,14 @@ public class NetManager : MonoBehaviour {
             try {
                 dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
             } catch (System.Net.Sockets.SocketException e) {
-                Debug.Log(e.SocketErrorCode);
-                // System.Net.Sockets.SocketError.
+                if (e.SocketErrorCode != System.Net.Sockets.SocketError.ConnectionReset) {
+                    Debug.Log(e.SocketErrorCode);
+                }
+                // NOTE(JULIAN): Otherwise, the server stopped sending, but that is ok! 
             } catch (System.Exception e) {
                 Debug.Log(e);
             }
-                // Debug.Log(e);
-            // }
+
             if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 // if (message.SequenceNumber > mostRecentNum) {
                     _writeMessageBuffer.Add(message);
