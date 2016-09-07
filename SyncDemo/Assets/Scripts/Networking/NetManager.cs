@@ -96,6 +96,7 @@ public class NetManager : MonoBehaviour {
         // SendStringMessage("Hello, universe!");
     }
 
+    [SerializeField] int _debug;
     void Reader () {
         int mostRecentNum = 0;
         NetMessage message;
@@ -104,6 +105,7 @@ public class NetManager : MonoBehaviour {
             int available = 0;
             try {
                 available = _clientSock.Available;
+                _debug = available;
             } catch (System.Exception e) {
                 Debug.Log(e);
             }
