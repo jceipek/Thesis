@@ -96,7 +96,6 @@ public class NetManager : MonoBehaviour {
         // SendStringMessage("Hello, universe!");
     }
 
-    [SerializeField] int _debug;
     void Reader () {
         int mostRecentNum = 0;
         NetMessage message;
@@ -118,7 +117,7 @@ public class NetManager : MonoBehaviour {
                     _writeMessageBuffer.Add(message);
                     mostRecentNum = message.SequenceNumber;
                 // }
-            } else {
+            } else if (dataLength > 0) {
                 Debug.Log("Undecodable");
             }
         }
