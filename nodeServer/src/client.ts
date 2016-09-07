@@ -41,6 +41,7 @@ const enum ENTITY_TYPE {
 
 const PORT = 8053;
 const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
+// const HOST = '127.0.0.1'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -152,9 +153,29 @@ const STATE : IState = { time: 0
                                    , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
                                    , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
                                    , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
-                       , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF]))
-                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF]))
-                                   , makeSegmentFn(Vec3.fromValues(0,0.5,0), Vec3.fromValues(0,1.5,0), new Uint8Array([0x00,0xFF,0x00,0xFF]))] };
+                                  //  ]
+                       , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
+                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
+                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
+                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
+                                   , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
+                                   ] };
+
+let DEBUG_START_POS = Vec3.fromValues(0, 0.5, 0);
+let DEBUG_END_POS = Vec3.fromValues(0, 1, 0);
+// let DEBUG_END_POS = Vec3.fromValues(1, 0.2, 0);
+
+STATE.controllerData.set('DEBUG', [makeControllerFn()]);
+Vec3.copy(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS);
+// STATE.controllerData.get('DEBUG')[0].grab.curr = 1;
+STATE.controllerData.get('DEBUG')[0].grab.curr = 0;
+
+let DEBUG_START_ROT = Quat.setAxisAngle(Quat.create(), Vec3.fromValues(0,0,1), 0);
+let DEBUG_ROT = Quat.setAxisAngle(Quat.create(), Vec3.fromValues(0,0,1), Math.PI/2);
+
+Quat.copy(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT);
+
+
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
 function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
@@ -181,8 +202,8 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                     , controller.rot));
 
   Quat.mul(/*out*/controller.pickedUpObjectRotOffset
-          , entity.rot, Quat.invert(/*out*/controller.pickedUpObjectRotOffset
-                                      , controller.rot));
+          , Quat.invert(/*out*/controller.pickedUpObjectRotOffset
+                                      , controller.rot), entity.rot);
 }
 
 
@@ -194,6 +215,9 @@ NETWORK.bind(undefined, undefined, () => {
   _interval = setInterval(() => {
 
     let DEBUG_start_sending = process.hrtime();
+
+    // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
+    // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
     for (let [client, controllers] of STATE.controllerData) {
         for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
@@ -215,20 +239,18 @@ NETWORK.bind(undefined, undefined, () => {
           if (!controller.grab.curr) {
             controller.pickedUpObject = null;
           } else if (controller.pickedUpObject != null) {
-            Vec3.copy(STATE.segments[0].start, controller.pos);
-            Vec3.add(STATE.segments[0].end, controller.pickedUpObjectOffset, controller.pos);
-
             Vec3.add(/*out*/controller.pickedUpObject.pos
                     , controller.pos, Vec3.transformQuat(/*out*/controller.pickedUpObject.pos
                                                         , controller.pickedUpObjectOffset, controller.rot));
 
-            Vec3.copy(STATE.segments[1].start, controller.pos);
-            Vec3.copy(STATE.segments[1].end, controller.pickedUpObject.pos);
+            Quat.mul(/*out*/controller.pickedUpObject.rot, controller.rot, controller.pickedUpObjectRotOffset);
 
-            Quat.mul(/*out*/controller.pickedUpObject.rot, controller.pickedUpObjectRotOffset, controller.rot);
           }
         }
     }
+
+            
+            
 
     Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationFn(entity); }).then(() => {
       // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
