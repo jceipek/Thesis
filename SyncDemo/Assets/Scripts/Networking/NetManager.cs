@@ -86,8 +86,8 @@ public class NetManager : MonoBehaviour {
         // }
 
 
-        SendControllerPositions(Vector3.zero, Quaternion.identity, false,
-                                Vector3.zero, Quaternion.identity, false);
+        // SendControllerPositions(Vector3.zero, Quaternion.identity, false,
+        //                         Vector3.zero, Quaternion.identity, false);
 
         // var leftState = _leftController.index != SteamVR_TrackedObject.EIndex.None? SteamVR_Controller.Input((int)_leftController.index).GetState() : new VRControllerState_t();
         // var rightState = _rightController.index != SteamVR_TrackedObject.EIndex.None? SteamVR_Controller.Input((int)_rightController.index).GetState() : new VRControllerState_t();
@@ -105,7 +105,7 @@ public class NetManager : MonoBehaviour {
             try {
                 available = _clientSock.Available;
             } catch (System.Exception e) {
-                Debug.Log(_servEP);
+                Debug.Log(e);
             }
             if (available > 0) {
                     dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
@@ -152,7 +152,11 @@ public class NetManager : MonoBehaviour {
         _sendBufferWriter.Write(rotation2.w);
         _sendBufferWriter.Write(grab2);
 
-        _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
+        try {
+            _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
+        } catch (System.Exception e) {
+            Debug.Log(e);
+        }
     }
 
     bool _running = true;
