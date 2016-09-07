@@ -75,12 +75,19 @@ public class NetManager : MonoBehaviour {
     }
 
     void Update () {
-        _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
-        for (int i = 0; i < _readMessageBuffer.Count; i++) {
-            _ioLayer.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
-            // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
-        }
-        _readMessageBuffer.Count = 0;
+        // if (_writeMessageBuffer.Count > 0) {
+            _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
+            // Debug.Log(_readMessageBuffer.Count);
+            for (int i = 0; i < _readMessageBuffer.Count; i++) {
+                _ioLayer.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
+                // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
+            }
+            _readMessageBuffer.Count = 0;
+        // }
+
+
+        SendControllerPositions(Vector3.zero, Quaternion.identity, false,
+                                Vector3.zero, Quaternion.identity, false);
 
         // var leftState = _leftController.index != SteamVR_TrackedObject.EIndex.None? SteamVR_Controller.Input((int)_leftController.index).GetState() : new VRControllerState_t();
         // var rightState = _rightController.index != SteamVR_TrackedObject.EIndex.None? SteamVR_Controller.Input((int)_rightController.index).GetState() : new VRControllerState_t();
@@ -94,15 +101,20 @@ public class NetManager : MonoBehaviour {
         NetMessage message;
         while (_running) {
             int dataLength = 0;
-            try {
-                dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
-            } catch (System.Exception e) {
-                Debug.Log(e);
-            }
-            if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
-                if (message.SequenceNumber > mostRecentNum) {
-                    _writeMessageBuffer.Add(message);
-                    mostRecentNum = message.SequenceNumber;
+            if (_clientSock.Available > 0) {
+                // try {
+                    dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
+                    // Debug.Log(_servEP);
+                // } catch (System.Exception e) {
+                    // Debug.Log(e);
+                // }
+                if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
+                    // if (message.SequenceNumber > mostRecentNum) {
+                        _writeMessageBuffer.Add(message);
+                        mostRecentNum = message.SequenceNumber;
+                    // }
+                } else {
+                    Debug.Log("Undecodable");
                 }
             }
         }

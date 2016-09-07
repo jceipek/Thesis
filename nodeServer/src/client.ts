@@ -146,14 +146,15 @@ interface IState {
 
 let _interval : null|NodeJS.Timer = null;
 const _sendBuffer = Buffer.allocUnsafe(1024);
-const FPS = 90;
+// const FPS = 90;
+const FPS = 30;
 const STATE : IState = { time: 0
                        , controllerData: new Map<string,IController[]>()
                        , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
-                                  //  ]
+                                  //  , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                  //  , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                  //  , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
+                                   ]
                        , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
                                    , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
                                    , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
@@ -219,6 +220,8 @@ NETWORK.bind(undefined, undefined, () => {
     // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
     // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
+    Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
+
     for (let [client, controllers] of STATE.controllerData) {
         for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
           let controller = controllers[controllerIndex];
@@ -249,14 +252,14 @@ NETWORK.bind(undefined, undefined, () => {
         }
     }
 
-            
-            
-
+    // TRANSFER STATE 
     Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationFn(entity); }).then(() => {
       // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-      Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-        let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-      });
+
+      // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+      //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      // });
+
       // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });
 
