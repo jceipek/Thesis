@@ -101,11 +101,14 @@ public class NetManager : MonoBehaviour {
         NetMessage message;
         while (_running) {
             int dataLength = 0;
-            if (_clientSock.Available > 0) {
-                // try {
+            int available = 0;
+            try {
+                available = _clientSock.Available;
+            } catch (System.Exception e) {
+                Debug.Log(_servEP);
+            }
+            if (available > 0) {
                     dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
-                    // Debug.Log(_servEP);
-                // } catch (System.Exception e) {
                     // Debug.Log(e);
                 // }
                 if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
