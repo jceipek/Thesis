@@ -41,7 +41,8 @@ const enum ENTITY_TYPE {
 
 const PORT = 8053;
 const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-// const HOST = '127.0.0.1'; // Local broadcast (https://tools.ietf.org/html/rfc922)
+// const HOST = '169.254.255.255';
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -146,15 +147,15 @@ interface IState {
 
 let _interval : null|NodeJS.Timer = null;
 const _sendBuffer = Buffer.allocUnsafe(1024);
-// const FPS = 90;
-const FPS = 30;
+const FPS = 90;
+// const FPS = 30;
 const STATE : IState = { time: 0
                        , controllerData: new Map<string,IController[]>()
                        , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                  //  , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                  //  , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
-                                  //  , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
-                                   ]
+                                   , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                   , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), ENTITY_TYPE.DEFAULT)
+                                   , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), ENTITY_TYPE.CLONER) ]
+                                  //  ]
                        , segments: [ makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
                                    , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
                                    , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
@@ -249,6 +250,8 @@ NETWORK.bind(undefined, undefined, () => {
             Quat.mul(/*out*/controller.pickedUpObject.rot, controller.rot, controller.pickedUpObjectRotOffset);
 
           }
+
+          controller.grab.last = controller.grab.curr; // So that we can grab things
         }
     }
 
@@ -283,31 +286,31 @@ NETWORK.on('message', (message : Buffer, remote) => {
                                ]);
   }
 
-  controllerData.get(client)[0].grab.last = controllerData.get(client)[0].grab.curr;
-  controllerData.get(client)[1].grab.last = controllerData.get(client)[1].grab.curr;
+  // controllerData.get(client)[0].grab.last = controllerData.get(client)[0].grab.curr;
+  // controllerData.get(client)[1].grab.last = controllerData.get(client)[1].grab.curr;
 
   let offset = 0;
   Vec3.set(/*out*/controllerData.get(client)[0].pos
-          , message.readFloatLE(offset)
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4));
+          , message.readFloatLE(offset, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
   Quat.set(/*out*/controllerData.get(client)[0].rot
-          , message.readFloatLE(offset+=4) // w
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4));
-  controllerData.get(client)[0].grab.curr = <0|1>message.readUInt8(offset+=4);
+          , message.readFloatLE(offset+=4, true) // w
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
+  controllerData.get(client)[0].grab.curr = <0|1>message.readUInt8(offset+=4, true);
 
   Vec3.set(/*out*/controllerData.get(client)[1].pos
-          , message.readFloatLE(offset+=1)
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4));
+          , message.readFloatLE(offset+=1, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
   Quat.set(/*out*/controllerData.get(client)[1].rot
-          , message.readFloatLE(offset+=4) // w
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4)
-          , message.readFloatLE(offset+=4));
-  controllerData.get(client)[1].grab.curr = <0|1>message.readUInt8(offset+=4);
+          , message.readFloatLE(offset+=4, true) // w
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
+  controllerData.get(client)[1].grab.curr = <0|1>message.readUInt8(offset+=4, true);
 });
 
 process.on('SIGINT', () => {
