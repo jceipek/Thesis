@@ -63,7 +63,7 @@ public class IOLayer : MonoBehaviour {
         if (message.ObjectId < _velocityColorEntities.Length) {
             // Debug.Log("ID: "+message.ObjectId);
             if (_velocityColorEntities[message.ObjectId] == null) {
-                _velocityColorEntities[message.ObjectId] = (Instantiate(_lineSegmentPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<VelocityColorEntity>();
+                _velocityColorEntities[message.ObjectId] = (Instantiate(_velocityColorEntityPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<VelocityColorEntity>();
                 _velocityColorEntities[message.ObjectId].Init();
             }
             _velocityColorEntities[message.ObjectId].UpdatePosRotColorVel(message.Position, message.Rotation, message.Velocity, message.Color);

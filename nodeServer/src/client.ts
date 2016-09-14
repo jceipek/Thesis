@@ -404,6 +404,8 @@ function serializeState (state) : string {
   switch (stateType) {
     case '[object Null]':
       return 'null';
+    case '[object Boolean]':
+      return state? 'true': 'false';
     case '[object Uint8Array]':
       return `{"_type": "Uint8Array", "content": [${state.reduce((acc, v) => { acc.push(v); return acc; }, [])}]}`
     case '[object Float32Array]':
@@ -438,6 +440,7 @@ function serializeState (state) : string {
 function deserializeStateObjectElement (stateObject) {
   const stateType = Object.prototype.toString.call(stateObject);
   switch (stateType) {
+    case '[object Boolean]':
     case '[object String]':
     case '[object Number]':
       return stateObject;
