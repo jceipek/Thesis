@@ -687,15 +687,19 @@ MonoBehaviour:
   _objectPrefab: {fileID: 140796, guid: 9e8506e4d99c846859a7da34f86ddf4a, type: 2}
   _lineSegmentPrefab: {fileID: 1000013940278896, guid: e52779be1471647ddacb88fd0287bfdd,
     type: 2}
+  _velocityColorEntityPrefab: {fileID: 1000012096120404, guid: 3c04c36686284450d9a1ff1b16835f63,
+    type: 2}
   _controllerInfos:
   - TrackedObject: {fileID: 394118495}
     position: {x: 0, y: 0, z: 0}
     rotation: {x: 0, y: 0, z: 0, w: 0}
     grabbed: 0
+    action0: 0
   - TrackedObject: {fileID: 394118494}
     position: {x: 0, y: 0, z: 0}
     rotation: {x: 0, y: 0, z: 0, w: 0}
     grabbed: 0
+    action0: 0
 --- !u!4 &2006598970
 Transform:
   m_ObjectHideFlags: 0

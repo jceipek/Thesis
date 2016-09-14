@@ -5,7 +5,8 @@ public enum MessageType {
   Unknown = -1,
   Position = 0X00,
   PositionRotation = 0X01,
-  Segment = 0X02
+  PositionRotationVelocityColor = 0X02,
+  Segment = 0X03
 }
 
 public struct NetMessage {
@@ -14,8 +15,9 @@ public struct NetMessage {
 	public ushort ObjectId;
 	public Vector3 Position;
 	public Quaternion Rotation;
-	public Vector3 Destination;
+	public Vector3 Velocity;
 	public Color32 Color;
+	public Vector3 Destination;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
@@ -64,7 +66,7 @@ public struct NetMessage {
   		float y = FloatFromBuff(data, ref offset);
   		float z = FloatFromBuff(data, ref offset);
   		float w = FloatFromBuff(data, ref offset);
-  		return new Quaternion(x, y, z, w); // NOTE(JULIAN): w comes first in the buffer but last in the constructor
+  		return new Quaternion(x, y, z, w);
   	}
 
 	private static NetMessage DecodePosition (byte[] data, ref int offset) {
@@ -80,6 +82,16 @@ public struct NetMessage {
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Rotation = QuaternionFromBuff(data, ref offset) };
+	}
+
+	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.PositionRotationVelocityColor,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        ObjectId = UInt16FromBuff(data, ref offset),
+		                        Position = Vector3FromBuff(data, ref offset),
+		                        Rotation = QuaternionFromBuff(data, ref offset),
+		                        Velocity = Vector3FromBuff(data, ref offset),
+		                        Color = ColorFromBuff(data, ref offset) };
 	}
 
 	private static NetMessage DecodeSegment (byte[] data, ref int offset) {
@@ -105,6 +117,12 @@ public struct NetMessage {
   				case MessageType.PositionRotation:
   					if (messageLength == 35) {
   						decodedMessage = DecodePositionRotation(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.PositionRotationVelocityColor:
+  					if (messageLength == 51) {
+  						decodedMessage = DecodePositionRotationVelocityColor(buffer, ref offset);
   						return true;
   					}
   					break;

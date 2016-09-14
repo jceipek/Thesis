@@ -36,6 +36,7 @@ const MESSAGE_TYPE_IDENT = {cs: 'MessageType', js: 'messageType'}
 const SEQUENCE_NUMBER_IDENT = {cs: 'SequenceNumber', js: 'sequenceNumber'}
 const OBJECTID_IDENT = {cs: 'ObjectId', js: 'objectId'}
 const POSITION_IDENT = {cs: 'Position', js: 'pos'}
+const VELOCITY_IDENT = {cs: 'Velocity', js: 'vel'}
 const DESTINATION_IDENT = {cs: 'Destination', js: 'dest'}
 const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
 const COLOR_IDENT = {cs: 'Color', js: 'color'}
@@ -54,6 +55,16 @@ const MESSAGES : IMessage[] = [
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            ]
+  }
+, { name: 'PositionRotationVelocityColor'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            , {ident: VELOCITY_IDENT, customType: 'Vector3'}
+            , {ident: COLOR_IDENT, customType: 'Color'}
             ]
   }
 , { name: 'Segment'

@@ -9,12 +9,15 @@ public class IOLayer : MonoBehaviour {
         public Vector3 position;
         public Quaternion rotation;
         public bool grabbed;
+        public bool action0;
     }
 
     [SerializeField] GameObject _objectPrefab;
     [SerializeField] GameObject _lineSegmentPrefab;
+    [SerializeField] GameObject _velocityColorEntityPrefab;
     GameObject[] _objects = new GameObject[1000];
     LineSegment[] _lineSegments = new LineSegment[1000]; 
+    VelocityColorEntity[] _velocityColorEntities = new VelocityColorEntity[1000]; 
 
     [SerializeField] ControllerInfo[] _controllerInfos;
 
@@ -25,6 +28,9 @@ public class IOLayer : MonoBehaviour {
                 break;
             case MessageType.PositionRotation:
                 ProcessPositionRotationMessage(message);
+                break;
+            case MessageType.PositionRotationVelocityColor:
+                ProcessPositionRotationVelocityColorMessage(message);
                 break;
             case MessageType.Segment:
                 ProcessSegmentMessage(message);
@@ -53,8 +59,19 @@ public class IOLayer : MonoBehaviour {
         }
     }
 
+    void ProcessPositionRotationVelocityColorMessage (NetMessage message) {
+        if (message.ObjectId < _velocityColorEntities.Length) {
+            // Debug.Log("ID: "+message.ObjectId);
+            if (_velocityColorEntities[message.ObjectId] == null) {
+                _velocityColorEntities[message.ObjectId] = (Instantiate(_lineSegmentPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<VelocityColorEntity>();
+                _velocityColorEntities[message.ObjectId].Init();
+            }
+            _velocityColorEntities[message.ObjectId].UpdatePosRotColorVel(message.Position, message.Rotation, message.Velocity, message.Color);
+        }  
+    }
+
     void ProcessSegmentMessage (NetMessage message) {
-        if (message.ObjectId < _objects.Length) {
+        if (message.ObjectId < _lineSegments.Length) {
             // Debug.Log("ID: "+message.ObjectId);
             if (_lineSegments[message.ObjectId] == null) {
                 _lineSegments[message.ObjectId] = (Instantiate(_lineSegmentPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<LineSegment>();
@@ -100,10 +117,11 @@ public class IOLayer : MonoBehaviour {
              SteamVR_Controller.Device device = SteamVR_Controller.Input((int)trackedObject.index);
             //  controllerInfo.grabbed = device.GetHairTrigger();
              controllerInfo.grabbed = device.GetPress(SteamVR_Controller.ButtonMask.Trigger);
+             controllerInfo.action0 = device.GetPress(SteamVR_Controller.ButtonMask.Touchpad);
 
         }
-        NetManager.G.SendControllerPositions(_controllerInfos[0].position, _controllerInfos[0].rotation, _controllerInfos[0].grabbed,
-                                             _controllerInfos[1].position, _controllerInfos[1].rotation, _controllerInfos[1].grabbed);
+        NetManager.G.SendControllerPositions(_controllerInfos[0].position, _controllerInfos[0].rotation, _controllerInfos[0].grabbed, _controllerInfos[0].action0,
+                                             _controllerInfos[1].position, _controllerInfos[1].rotation, _controllerInfos[1].grabbed, _controllerInfos[1].action0);
     }
 
 
