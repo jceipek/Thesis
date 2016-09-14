@@ -75,7 +75,7 @@ function sendEntityPositionRotation (entity : IEntity, callback : () => (err: an
 }
 
 function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationVelocityColorMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, entity.id, entity.pos, entity.rot, entity.vel, entity.color);
+  const messageLength = Protocol.fillBufferWithPositionRotationVelocityColorMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationVelocityColor, _currSeqId, entity.id, entity.pos, entity.rot, entity.vel, entity.color);
   _currSeqId++;
   sendFn(_sendBuffer, messageLength, callback);
 }
@@ -332,7 +332,7 @@ NETWORK.bind(undefined, undefined, () => {
       const entities = STATE.entities;
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
-        Vec3.scaleAndAdd(entity.pos, entity.pos, entity.vel, 1/FPS); // pos = pos + vel * dt_in_units_per_sec
+        Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
       }
     }
 
