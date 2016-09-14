@@ -13,6 +13,6 @@ public class VelocityColorEntity : MonoBehaviour {
 		transform.rotation = rot;
 		_renderer.material.color = color;
 		_lineSegment.StartPoint = Vector3.zero;
-		_lineSegment.EndPoint = rot*vel;
+		_lineSegment.EndPoint = vel;
 	}
 }

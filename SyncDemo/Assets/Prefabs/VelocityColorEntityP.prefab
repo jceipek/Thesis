@@ -213,7 +213,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bf448da5b87e442b69b45f09c6b71894, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _thickness: 0.01
+  _thickness: 0.07
   _radialResolution: 3
   _firstNormal: {x: 1, y: 0, z: 0}
   _maxLength: 2

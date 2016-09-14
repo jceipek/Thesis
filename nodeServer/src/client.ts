@@ -298,6 +298,7 @@ function doProcessControllerInput () {
     if (controllerList.length > 1) {
       let controller = controllerList[1];
       Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
+      Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
 
       // if (!STATE.entitiesToVelocitySegments.has(entity)) {
       //   let segment = makeSegmentFn(entity.pos, Vec3.clone(controller.pos), new Uint8Array([0x00,0x00,0xFF,0xFF]));
