@@ -8,9 +8,12 @@ public class ArrowMesh : MonoBehaviour {
 	const int ARROW_RESOLUTION = 20;
 	Vector3[] _vertices = new Vector3[ArrowheadVertexCount(ARROW_RESOLUTION)+CappedCylinderVertexCount(ARROW_RESOLUTION)];
 	// Vector3[] _vertices = new Vector3[CappedCylinderVertexCount(ARROW_RESOLUTION)];
+	// Vector3[] _vertices = new Vector3[ArrowheadVertexCount(ARROW_RESOLUTION)];
 	Vector3[] _normals = new Vector3[ArrowheadVertexCount(ARROW_RESOLUTION)+CappedCylinderVertexCount(ARROW_RESOLUTION)];
 	// Vector3[] _normals = new Vector3[CappedCylinderVertexCount(ARROW_RESOLUTION)];
+	// Vector3[] _normals = new Vector3[ArrowheadVertexCount(ARROW_RESOLUTION)];
 	int[] _triangleIndices = new int[(ArrowheadTriangleCount(ARROW_RESOLUTION)+CappedCylinderTriangleCount(ARROW_RESOLUTION))*3];
+	// int[] _triangleIndices = new int[(ArrowheadTriangleCount(ARROW_RESOLUTION))*3];
 
 	void Awake () {
 		_mesh = new Mesh();
@@ -18,22 +21,71 @@ public class ArrowMesh : MonoBehaviour {
 		_meshFilter.mesh = _mesh;
 	}
 
-	void Update () {
-		int vertOffset = 0;
-		int indexOffset = 0;
-		AppendArrowhead(vertexBuffer: _vertices, normalsBuffer: _normals, triangleIndexBuffer: _triangleIndices,
-		                tipPos: Vector3.zero, length: 2f, diameter: 1f, startVertOffset: vertOffset, startIndexOffset: indexOffset, resolution: ARROW_RESOLUTION);
-		vertOffset += ArrowheadVertexCount(ARROW_RESOLUTION);
-		indexOffset += ArrowheadTriangleCount(ARROW_RESOLUTION)*3;
+	[SerializeField] Vector3 _pointingFrom = Vector3.zero;
+	[SerializeField] Vector3 _pointingTo = Vector3.zero;
+	public void UpdatePoints (Vector3 pointingFrom, Vector3 pointingTo) {
+		_pointingFrom = pointingFrom;
+		_pointingTo = pointingTo;
+	}
 
-		AppendCappedCylinder(vertexBuffer: _vertices, normalsBuffer: _normals, triangleIndexBuffer: _triangleIndices,
-		                 	tipPos: new Vector3(0f,-2f,0f), length: 4f, diameter: 0.5f, startVertOffset: vertOffset, startIndexOffset: indexOffset, resolution: ARROW_RESOLUTION);
-		vertOffset += CappedCylinderVertexCount(ARROW_RESOLUTION);
+	void Start () {
+		int indexOffset = 0;
+		int vertOffset = 0;
+		AppendArrowheadTriangles(_triangleIndices, startVertOffset: vertOffset, startIndexOffset: indexOffset, resolution: ARROW_RESOLUTION);
+		indexOffset += ArrowheadTriangleCount(ARROW_RESOLUTION)*3;
+		vertOffset += ArrowheadVertexCount(ARROW_RESOLUTION);
+		AppendCappedCylinderTriangles(triangleIndexBuffer: _triangleIndices,
+		                 			  startVertOffset: vertOffset, startIndexOffset: indexOffset, resolution: ARROW_RESOLUTION);
 		indexOffset += CappedCylinderTriangleCount(ARROW_RESOLUTION)*3;
+		vertOffset += CappedCylinderVertexCount(ARROW_RESOLUTION);
 
 		_mesh.vertices = _vertices;
 		_mesh.normals = _normals;
 		_mesh.triangles = _triangleIndices;
+		_mesh.RecalculateBounds();
+	}
+	void Update () {
+		Quaternion rotation = Quaternion.identity;
+		float magnitude = (_pointingTo - _pointingFrom).magnitude;
+		float arrowheadDiameter = Mathf.Lerp(0f, 0.15f, magnitude/0.2f);
+		float arrowheadLength = Mathf.Lerp(0f, 0.2f, magnitude/0.2f); 
+		float cyclinderDiameter = 0.07f/0.15f * arrowheadDiameter;
+		if (Mathf.Approximately(magnitude, 0f)) {
+			arrowheadDiameter = 0f;
+			cyclinderDiameter = 0f;
+			arrowheadLength = 0f;
+		}
+
+		float cylinderLength = magnitude - arrowheadLength;
+		Vector3 forward = (_pointingTo - _pointingFrom).normalized;
+		Vector3 cylinderTip = _pointingFrom + forward * cylinderLength;
+
+		if (!Mathf.Approximately(magnitude, 0f)) {
+			// XXX(JULIAN): Hacky; may need || transport frame to prevent weirdness during transition to facing along world axes
+			if (Mathf.Approximately((Vector3.up - forward).sqrMagnitude, 0f)) {
+				Vector3 cross = Vector3.Cross(Vector3.right, forward);
+				rotation = Quaternion.LookRotation(cross, forward);
+			} else {
+				Vector3 cross = Vector3.Cross(Vector3.up, forward);
+				rotation = Quaternion.LookRotation(cross, forward);
+			}
+		}
+
+		// Debug.DrawLine(_pointingFrom, _pointingTo, Color.green);
+		// Debug.DrawRay(Vector3.zero, Vector3.up*5f, Color.red);
+		// Debug.DrawRay(Vector3.zero, rotation*(Vector3.up*5f), Color.blue);
+
+		int vertOffset = 0;
+		AppendArrowhead(vertexBuffer: _vertices, normalsBuffer: _normals,
+		                tipPos: _pointingTo, length: arrowheadLength, diameter: arrowheadDiameter, rotation: rotation, startVertOffset: vertOffset, resolution: ARROW_RESOLUTION);
+		vertOffset += ArrowheadVertexCount(ARROW_RESOLUTION);
+		
+		AppendCappedCylinder(vertexBuffer: _vertices, normalsBuffer: _normals,
+		                 	tipPos: cylinderTip, length: cylinderLength, diameter: cyclinderDiameter, rotation: rotation, startVertOffset: vertOffset, resolution: ARROW_RESOLUTION);
+		vertOffset += CappedCylinderVertexCount(ARROW_RESOLUTION);
+
+		_mesh.vertices = _vertices;
+		_mesh.normals = _normals;
 		_mesh.RecalculateBounds();
 	}
 
@@ -52,44 +104,8 @@ public class ArrowMesh : MonoBehaviour {
 	static int CappedCylinderTriangleCount (int resolution) {
 		return resolution*4;
 	}
-	static void AppendArrowhead (Vector3[] vertexBuffer, Vector3[] normalsBuffer, int[] triangleIndexBuffer,
-	                             Vector3 tipPos, float length, float diameter, int startVertOffset, int startIndexOffset, int resolution) {
-		vertexBuffer[startVertOffset] = tipPos;
-		normalsBuffer[startVertOffset] = Vector3.up;
-		
-		// Based on http://slabode.exofire.net/circle_draw.shtml
-		float theta = 2f * Mathf.PI/(float)resolution; 
-		float c = Mathf.Cos(theta);//precalculate the sine and cosine
-		float s = Mathf.Sin(theta);
-		float t;
 
-		float x = diameter/2f;//we start at angle = 0 
-		float y = 0;
-
-		for (int i = 0; i < resolution; i++) {
-			var newVertPos = new Vector3(x, -length, y);
-			vertexBuffer[startVertOffset+1+i] = newVertPos; // Part of arrow head
-			normalsBuffer[startVertOffset+1+i] = Vector3.Cross((tipPos-newVertPos).normalized,Vector3.Cross(new Vector3(x, 0f, y), Vector3.up));
-			// Debug.LogFormat(">{0}:",startOffset+1+i);
-			// Debug.DrawRay(newVertPos, ((tipPos-newVertPos)).normalized, Color.red);
-			// Debug.DrawRay(newVertPos, Vector3.Cross(new Vector3(x, 0f, y), Vector3.up), Color.green);
-			// Debug.DrawRay(newVertPos, new Vector3(x, 0f, y), Color.blue);
-
-			vertexBuffer[startVertOffset+1+resolution+i] = newVertPos; // Part of base
-			normalsBuffer[startVertOffset+1+resolution+i] = Vector3.down;
-			// Debug.LogFormat(">>{0}:",startOffset+1+resolution+i);
-			// Debug.DrawRay(newVertPos, Vector3.down, Color.blue);
-			
-			//apply the rotation matrix
-			t = x;
-			x = c * x - s * y;
-			y = s * t + c * y;
-		} 
-
-		vertexBuffer[startVertOffset+1+resolution+resolution] = new Vector3(0f, -length, 0f);
-		normalsBuffer[startVertOffset+1+resolution+resolution] = Vector3.down;
-		// Debug.LogFormat(">>>{0}:",startOffset+1+resolution+resolution);
-
+	static void AppendArrowheadTriangles (int[] triangleIndexBuffer, int startVertOffset, int startIndexOffset, int resolution) {
 		for (int i = 0; i < resolution; i++) {
 			triangleIndexBuffer[startIndexOffset+i*3] = startVertOffset;
 			triangleIndexBuffer[startIndexOffset+i*3+1] = startVertOffset+1+((i+1)%resolution);
@@ -103,11 +119,11 @@ public class ArrowMesh : MonoBehaviour {
 			triangleIndexBuffer[baseIndex+i*3+2] = startVertOffset+1+resolution+((i+1)%resolution);
 		}
 	}
-
-	static void AppendCappedCylinder (Vector3[] vertexBuffer, Vector3[] normalsBuffer, int[] triangleIndexBuffer,
-	                                  Vector3 tipPos, float length, float diameter, int startVertOffset, int startIndexOffset, int resolution) {
+	
+	static void AppendArrowhead (Vector3[] vertexBuffer, Vector3[] normalsBuffer,
+	                             Vector3 tipPos, float length, float diameter, Quaternion rotation, int startVertOffset, int resolution) {
 		vertexBuffer[startVertOffset] = tipPos;
-		normalsBuffer[startVertOffset] = Vector3.up;
+		normalsBuffer[startVertOffset] = rotation*Vector3.up;
 		
 		// Based on http://slabode.exofire.net/circle_draw.shtml
 		float theta = 2f * Mathf.PI/(float)resolution; 
@@ -118,32 +134,35 @@ public class ArrowMesh : MonoBehaviour {
 		float x = diameter/2f;//we start at angle = 0 
 		float y = 0;
 
+		Vector3 basePos = tipPos + -(rotation * new Vector3(0f, length, 0f));
 		for (int i = 0; i < resolution; i++) {
-			var newVertPos = new Vector3(x, 0, y) + tipPos;
-			vertexBuffer[startVertOffset+1+i] = newVertPos; // Part of top (cap)
-			normalsBuffer[startVertOffset+1+i] = Vector3.up;
+			var newVertPos = rotation*new Vector3(x, 0f, y);
+			vertexBuffer[startVertOffset+1+i] = basePos + newVertPos; // Part of arrow head
+			normalsBuffer[startVertOffset+1+i] = Vector3.Cross((tipPos-(newVertPos+basePos)).normalized,
+															   Vector3.Cross(newVertPos.normalized,
+															   				 (tipPos-basePos).normalized));
+			// Debug.LogFormat(">{0}:",startOffset+1+i);
+			// Debug.DrawRay(newVertPos, ((tipPos-newVertPos)).normalized, Color.red);
+			// Debug.DrawRay(newVertPos, Vector3.Cross(new Vector3(x, 0f, y), Vector3.up), Color.green);
+			// Debug.DrawRay(newVertPos, new Vector3(x, 0f, y), Color.blue);
 
-			vertexBuffer[startVertOffset+1+resolution+i] = newVertPos; // Top of cylinder
-			normalsBuffer[startVertOffset+1+resolution+i] = new Vector3(x, 0f, y).normalized;
-
-
-			newVertPos = new Vector3(x, -length, y) + tipPos;
-			vertexBuffer[startVertOffset+1+resolution*2+i] = newVertPos; // Bottom of cylinder
-			normalsBuffer[startVertOffset+1+resolution*2+i] = new Vector3(x, 0f, y).normalized;
-
-			vertexBuffer[startVertOffset+1+resolution*3+i] = newVertPos; // Part of bottom (cap)
-			normalsBuffer[startVertOffset+1+resolution*3+i] = Vector3.down;
-
+			vertexBuffer[startVertOffset+1+resolution+i] = basePos + newVertPos; // Part of base
+			normalsBuffer[startVertOffset+1+resolution+i] = -(rotation*Vector3.up);
+			// Debug.LogFormat(">>{0}:",startOffset+1+resolution+i);
+			// Debug.DrawRay(newVertPos, Vector3.down, Color.blue);
+			
 			//apply the rotation matrix
 			t = x;
 			x = c * x - s * y;
 			y = s * t + c * y;
 		} 
 
-		vertexBuffer[startVertOffset+1+resolution*4] = new Vector3(0f, -length, 0f) + tipPos;
-		normalsBuffer[startVertOffset+1+resolution*4] = Vector3.down;
+		vertexBuffer[startVertOffset+1+resolution+resolution] = basePos;
+		normalsBuffer[startVertOffset+1+resolution+resolution] = -(rotation*Vector3.up);
 		// Debug.LogFormat(">>>{0}:",startOffset+1+resolution+resolution);
-
+	}
+	static void AppendCappedCylinderTriangles (int[] triangleIndexBuffer,
+	                                           int startVertOffset, int startIndexOffset, int resolution) {
 		// TOP
 		for (int i = 0; i < resolution; i++) {
 			triangleIndexBuffer[startIndexOffset+i*3] = startVertOffset;
@@ -170,27 +189,59 @@ public class ArrowMesh : MonoBehaviour {
 			triangleIndexBuffer[baseIndex+i*3+1] = startVertOffset+1+resolution*3+i;
 			triangleIndexBuffer[baseIndex+i*3+2] = startVertOffset+1+resolution*3+((i+1)%resolution);
 		}
+	}
+	static void AppendCappedCylinder (Vector3[] vertexBuffer, Vector3[] normalsBuffer,
+	                                  Vector3 tipPos, float length, float diameter, Quaternion rotation, int startVertOffset, int resolution) {
+		vertexBuffer[startVertOffset] = tipPos;
+		normalsBuffer[startVertOffset] = rotation*Vector3.up;
 
-		// int baseIndex = startIndexOffset+(resolution-1)*3+3;
-		// for (int i = 0; i < resolution; i++) {
-		// 	triangleIndexBuffer[baseIndex+i*3] = startVertOffset+1+resolution+resolution;
-		// 	triangleIndexBuffer[baseIndex+i*3+1] = startVertOffset+1+resolution+i;
-		// 	triangleIndexBuffer[baseIndex+i*3+2] = startVertOffset+1+resolution+((i+1)%resolution);
-		// }
+		Vector3 basePos = tipPos + rotation * new Vector3(0f,-length,0f);
+		
+		// Based on http://slabode.exofire.net/circle_draw.shtml
+		float theta = 2f * Mathf.PI/(float)resolution; 
+		float c = Mathf.Cos(theta);//precalculate the sine and cosine
+		float s = Mathf.Sin(theta);
+		float t;
+
+		float x = diameter/2f;//we start at angle = 0 
+		float y = 0;
+
+		for (int i = 0; i < resolution; i++) {
+			var newVertPos = rotation*new Vector3(x, 0, y);
+			vertexBuffer[startVertOffset+1+i] = newVertPos + tipPos; // Part of top (cap)
+			normalsBuffer[startVertOffset+1+i] = rotation*Vector3.up;
+
+			vertexBuffer[startVertOffset+1+resolution+i] = newVertPos + tipPos; // Top of cylinder
+			normalsBuffer[startVertOffset+1+resolution+i] = newVertPos.normalized;
+
+			vertexBuffer[startVertOffset+1+resolution*2+i] = newVertPos + basePos; // Bottom of cylinder
+			normalsBuffer[startVertOffset+1+resolution*2+i] = newVertPos.normalized;
+
+			vertexBuffer[startVertOffset+1+resolution*3+i] = newVertPos + basePos; // Part of bottom (cap)
+			normalsBuffer[startVertOffset+1+resolution*3+i] = -(rotation*Vector3.up);
+
+			//apply the rotation matrix
+			t = x;
+			x = c * x - s * y;
+			y = s * t + c * y;
+		} 
+
+		vertexBuffer[startVertOffset+1+resolution*4] = basePos;
+		normalsBuffer[startVertOffset+1+resolution*4] = -(rotation*Vector3.up);
 	}
 
-	void OnDrawGizmos () {
-		// for (int i = 0; i < _triangleIndices.Length; i += 3) {
-		// 	Debug.DrawLine(_vertices[_triangleIndices[i]],_vertices[_triangleIndices[i+1]], Color.red);
-		// 	Debug.DrawLine(_vertices[_triangleIndices[i+1]],_vertices[_triangleIndices[i+2]], Color.green);
-		// 	Debug.DrawLine(_vertices[_triangleIndices[i+2]],_vertices[_triangleIndices[i]], Color.blue);
-		// }
-		for (int i = 0; i < _vertices.Length; i++) {
-			Debug.DrawRay(_vertices[i], _normals[i]*0.2f, Color.cyan);
-			DrawDebugAxes(_vertices[i], 0.1f);
-			DrawLabel(_vertices[i]+_normals[i]*0.2f, i);
-		}
-	}
+	// void OnDrawGizmos () {
+	// 	// for (int i = 0; i < _triangleIndices.Length; i += 3) {
+	// 	// 	Debug.DrawLine(_vertices[_triangleIndices[i]],_vertices[_triangleIndices[i+1]], Color.red);
+	// 	// 	Debug.DrawLine(_vertices[_triangleIndices[i+1]],_vertices[_triangleIndices[i+2]], Color.green);
+	// 	// 	Debug.DrawLine(_vertices[_triangleIndices[i+2]],_vertices[_triangleIndices[i]], Color.blue);
+	// 	// }
+	// 	for (int i = 0; i < _vertices.Length; i++) {
+	// 		Debug.DrawRay(_vertices[i], _normals[i]*0.2f, Color.cyan);
+	// 		DrawDebugAxes(_vertices[i], 0.1f);
+	// 		DrawLabel(_vertices[i]+_normals[i]*0.2f, i);
+	// 	}
+	// }
 
 	void DrawDebugAxes (Vector3 pos, float scale) {
 		Debug.DrawLine(pos + Vector3.right * scale/2f, pos - Vector3.right * scale/2f);

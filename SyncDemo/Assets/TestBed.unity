@@ -127,6 +127,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _meshFilter: {fileID: 433210472}
+  _pointingFrom: {x: 0, y: 0, z: 0}
+  _pointingTo: {x: 1, y: 0, z: 0}
 --- !u!23 &433210474
 MeshRenderer:
   m_ObjectHideFlags: 0

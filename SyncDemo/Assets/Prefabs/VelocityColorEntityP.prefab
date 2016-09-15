@@ -54,9 +54,8 @@ GameObject:
   m_Component:
   - 4: {fileID: 4000010547027600}
   - 23: {fileID: 23000013886646806}
-  - 114: {fileID: 114000010983510426}
   - 33: {fileID: 33000013397569864}
-  - 114: {fileID: 114000013059658866}
+  - 114: {fileID: 114000010712615456}
   m_Layer: 0
   m_Name: VelocityVisuals
   m_TagString: Untagged
@@ -189,7 +188,7 @@ BoxCollider:
   serializedVersion: 2
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &114000010983510426
+--- !u!114 &114000010712615456
 MonoBehaviour:
   m_ObjectHideFlags: 1
   m_PrefabParentObject: {fileID: 0}
@@ -197,27 +196,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1000013280371648}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5261ebf9ce494472d98ed9e90bbe781b, type: 3}
+  m_Script: {fileID: 11500000, guid: e8e584ce7f6a34e9192d3d6270e44d42, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  StartPoint: {x: 0, y: 0, z: 0}
-  EndPoint: {x: 0, y: 0, z: 0}
---- !u!114 &114000013059658866
-MonoBehaviour:
-  m_ObjectHideFlags: 1
-  m_PrefabParentObject: {fileID: 0}
-  m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1000013280371648}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bf448da5b87e442b69b45f09c6b71894, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _thickness: 0.07
-  _radialResolution: 3
-  _firstNormal: {x: 1, y: 0, z: 0}
-  _maxLength: 2
-  _fullRecomputeEveryFrame: 1
+  _meshFilter: {fileID: 33000013397569864}
+  _pointingFrom: {x: 0, y: 0, z: 0}
+  _pointingTo: {x: 0, y: 0, z: 0}
 --- !u!114 &114000014223282536
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -230,4 +214,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _renderer: {fileID: 23000010120915964}
-  _lineSegment: {fileID: 114000010983510426}
+  _arrowMesh: {fileID: 114000010712615456}
