@@ -44,12 +44,16 @@ public class ArrowMesh : MonoBehaviour {
 		_mesh.triangles = _triangleIndices;
 		_mesh.RecalculateBounds();
 	}
+
+	[SerializeField] float _baseArrowHeadDiameter = 0.15f/2f; 
+	[SerializeField] float _baseArrowHeadLength = 0.2f/2f;
+	[SerializeField] float _baseCyclinderDiameter = 0.07f/2f;
 	void Update () {
 		Quaternion rotation = Quaternion.identity;
 		float magnitude = (_pointingTo - _pointingFrom).magnitude;
-		float arrowheadDiameter = Mathf.Lerp(0f, 0.15f, magnitude/0.2f);
-		float arrowheadLength = Mathf.Lerp(0f, 0.2f, magnitude/0.2f); 
-		float cyclinderDiameter = 0.07f/0.15f * arrowheadDiameter;
+		float arrowheadDiameter = Mathf.Lerp(0f, _baseArrowHeadDiameter, magnitude/_baseArrowHeadLength);
+		float arrowheadLength = Mathf.Lerp(0f, _baseArrowHeadLength, magnitude/_baseArrowHeadLength); 
+		float cyclinderDiameter = _baseCyclinderDiameter/_baseArrowHeadDiameter * arrowheadDiameter;
 		if (Mathf.Approximately(magnitude, 0f)) {
 			arrowheadDiameter = 0f;
 			cyclinderDiameter = 0f;
