@@ -202,6 +202,9 @@ MonoBehaviour:
   _meshFilter: {fileID: 33000013397569864}
   _pointingFrom: {x: 0, y: 0, z: 0}
   _pointingTo: {x: 0, y: 0, z: 0}
+  _baseArrowHeadDiameter: 0.02
+  _baseArrowHeadLength: 0.05
+  _baseCyclinderDiameter: 0.01
 --- !u!114 &114000014223282536
 MonoBehaviour:
   m_ObjectHideFlags: 1
