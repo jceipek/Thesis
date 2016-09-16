@@ -44,7 +44,8 @@ const enum ENTITY_TYPE {
 
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-const HOST = '169.254.255.255'; // Subnet broadcast
+// const HOST = '169.254.255.255'; // Subnet broadcast
+const HOST = '192.168.1.255'; // Subnet broadcast
 // const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
@@ -178,10 +179,10 @@ function getInitialState () : IState {
       time: 0
     , simulating: false
     , controllerData: new Map<string,IController[]>()
-    , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xFF]), ENTITY_TYPE.CLONER) ]
+    , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
+                , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
+                , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
+                , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
     , latestEntityId: 0
     , segments: []
@@ -260,7 +261,7 @@ function doProcessControllerInput () {
           if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
             if (closestEntity.type == ENTITY_TYPE.CLONER) {
               // let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array(closestEntity.color), ENTITY_TYPE.DEFAULT);
-              let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array([0xFF,0x00,0x00,0xFF]), ENTITY_TYPE.DEFAULT);
+              let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT);
               console.log(clonedObject);
               STATE.entities.push(clonedObject);
               pickUpEntityWithController(clonedObject, controller);
