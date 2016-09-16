@@ -82,6 +82,10 @@ public class IOLayer : MonoBehaviour {
         }
     }
 
+    void Awake () {
+        SteamVR_Render.instance.trackingSpace = ETrackingUniverseOrigin.TrackingUniverseRawAndUncalibrated;
+    }
+
     void OnEnable()
     {
         SteamVR_Utils.Event.Listen("new_poses", OnNewPoses);
