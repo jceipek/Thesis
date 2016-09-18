@@ -254,14 +254,18 @@ Prefab:
     - target: {fileID: 3380982, guid: 4d293c8e162f3874b982baadd71153d2, type: 2}
       propertyPath: m_Mesh
       value: 
-      objectReference: {fileID: 1824303189}
+      objectReference: {fileID: 1173425131}
     - target: {fileID: 2348914, guid: 4d293c8e162f3874b982baadd71153d2, type: 2}
       propertyPath: m_Materials.Array.data[0]
       value: 
-      objectReference: {fileID: 674505165}
+      objectReference: {fileID: 960257947}
     - target: {fileID: 146900, guid: 4d293c8e162f3874b982baadd71153d2, type: 2}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 11411836, guid: 4d293c8e162f3874b982baadd71153d2, type: 2}
+      propertyPath: wireframe
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 11420968, guid: 4d293c8e162f3874b982baadd71153d2, type: 2}
@@ -358,7 +362,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 2
---- !u!21 &674505165
+--- !u!21 &960257947
 Material:
   serializedVersion: 6
   m_ObjectHideFlags: 0
@@ -450,7 +454,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
---- !u!43 &1824303189
+--- !u!43 &1173425131
 Mesh:
   m_ObjectHideFlags: 0
   m_PrefabParentObject: {fileID: 0}
@@ -578,6 +582,12 @@ Mesh:
   m_BakedConvexCollisionMesh: 
   m_BakedTriangleCollisionMesh: 
   m_MeshOptimized: 0
+--- !u!114 &1284133709 stripped
+MonoBehaviour:
+  m_PrefabParentObject: {fileID: 11470538, guid: 4d293c8e162f3874b982baadd71153d2,
+    type: 2}
+  m_PrefabInternal: {fileID: 394118493}
+  m_Script: {fileID: 11500000, guid: d37c2cf88f7c59f4c8cf5d3812568143, type: 3}
 --- !u!1 &1921872863
 GameObject:
   m_ObjectHideFlags: 0
@@ -684,22 +694,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d803607e75a9a4830baa03c77a1e6e3b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _headsetTrackedObject: {fileID: 1284133709}
+  _controller0TrackedObject: {fileID: 394118495}
+  _controller1TrackedObject: {fileID: 394118494}
   _objectPrefab: {fileID: 140796, guid: 9e8506e4d99c846859a7da34f86ddf4a, type: 2}
   _lineSegmentPrefab: {fileID: 1000013940278896, guid: e52779be1471647ddacb88fd0287bfdd,
     type: 2}
   _velocityColorEntityPrefab: {fileID: 1000012096120404, guid: 3c04c36686284450d9a1ff1b16835f63,
     type: 2}
-  _controllerInfos:
-  - TrackedObject: {fileID: 394118495}
-    position: {x: 0, y: 0, z: 0}
-    rotation: {x: 0, y: 0, z: 0, w: 0}
-    grabbed: 0
-    action0: 0
-  - TrackedObject: {fileID: 394118494}
-    position: {x: 0, y: 0, z: 0}
-    rotation: {x: 0, y: 0, z: 0, w: 0}
-    grabbed: 0
-    action0: 0
 --- !u!4 &2006598970
 Transform:
   m_ObjectHideFlags: 0

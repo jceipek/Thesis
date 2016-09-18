@@ -40,6 +40,8 @@ const VELOCITY_IDENT = {cs: 'Velocity', js: 'vel'}
 const DESTINATION_IDENT = {cs: 'Destination', js: 'dest'}
 const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
 const COLOR_IDENT = {cs: 'Color', js: 'color'}
+const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
+const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
 
 const MESSAGES : IMessage[] = [
   { name: 'Position'
@@ -55,6 +57,16 @@ const MESSAGES : IMessage[] = [
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            ]
+  }
+, { name: 'PositionRotationScaleModel'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: MODEL_TYPE_IDENT, customType: 'UInt16'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            , {ident: SCALE_IDENT, customType: 'Vector3'}
             ]
   }
 , { name: 'PositionRotationVelocityColor'

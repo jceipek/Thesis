@@ -131,9 +131,18 @@ public class NetManager : MonoBehaviour {
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
     }
 
-    public void SendControllerPositions (Vector3 position1, Quaternion rotation1, bool grab1, bool action01,
-                                         Vector3 position2, Quaternion rotation2, bool grab2, bool action02) {
+    public void SendInputData (Vector3 headsetPos, Quaternion headsetRot,
+                               Vector3 position1, Quaternion rotation1, bool grab1, bool action01,
+                               Vector3 position2, Quaternion rotation2, bool grab2, bool action02) {
         _sendBufferStream.Position = 0;
+        _sendBufferWriter.Write(headsetPos.x);
+        _sendBufferWriter.Write(headsetPos.y);
+        _sendBufferWriter.Write(headsetPos.z);
+        _sendBufferWriter.Write(headsetRot.x);
+        _sendBufferWriter.Write(headsetRot.y);
+        _sendBufferWriter.Write(headsetRot.z);
+        _sendBufferWriter.Write(headsetRot.w);
+
         _sendBufferWriter.Write(position1.x);
         _sendBufferWriter.Write(position1.y);
         _sendBufferWriter.Write(position1.z);

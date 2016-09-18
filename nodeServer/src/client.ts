@@ -18,6 +18,14 @@ interface IEntity {
   color: IColor;
 }
 
+interface IModel {
+  type: MODEL_TYPE;
+  id: number;
+  pos: IVector3;
+  rot: IQuaternion;
+  scale: IVector3;
+}
+
 interface ISegment {
   id: number;
   start: IVector3;
@@ -40,6 +48,12 @@ const enum VOLUME_TYPE {
 const enum ENTITY_TYPE {
   DEFAULT = 0,
   CLONER = 1
+}
+
+const enum MODEL_TYPE {
+  HEADSET = 0,
+  BASIC_CONTROLLER = 1,
+  CUBE = 2
 }
 
 const PORT = 8053;
@@ -118,16 +132,28 @@ interface IButtonState {
   last: 0|1;
 }
 
+interface IHeadset {
+  id : number;
+  pos : IVector3;
+  rot: IQuaternion;
+}
+
 interface IController {
-   pos : IVector3;
-   interactionVolume: IInteractionVolume;
-   rot: IQuaternion;
-   grab: IButtonState;
-   action0: IButtonState;
-   pickedUpObject: IEntity|null;
-   pickedUpObjectTime: Date;
-   pickedUpObjectOffset: IVector3;
-   pickedUpObjectRotOffset: IVector3;
+  id : number;
+  pos : IVector3;
+  interactionVolume: IInteractionVolume;
+  rot: IQuaternion;
+  grab: IButtonState;
+  action0: IButtonState;
+  pickedUpObject: IEntity|null;
+  pickedUpObjectTime: Date;
+  pickedUpObjectOffset: IVector3;
+  pickedUpObjectRotOffset: IVector3;
+}
+
+interface IInputData {
+  headset: IHeadset;
+  controllers: IController[];
 }
 
 function makeControllerFn () : IController {
@@ -139,7 +165,14 @@ function makeControllerFn () : IController {
          , pickedUpObject: null
          , pickedUpObjectTime: null
          , pickedUpObjectOffset: Vec3.create()
-         , pickedUpObjectRotOffset: Quat.create() };
+         , pickedUpObjectRotOffset: Quat.create()
+         , id: _latestEntityId++ };
+}
+
+function makeHeadsetFn () : IHeadset {
+  return { pos: Vec3.create()
+         , rot: Quat.create()
+         , id: _latestEntityId++ };
 }
 
 // let triangleWave = function (t, halfPeriod) {
@@ -163,9 +196,10 @@ function doesControllerOverlapObject (controller, obj) {
 interface IState {
   time: number;
   simulating: boolean;
-  controllerData: Map<string,IController[]>;
-  entities: IEntity[]
-  latestEntityId: number;
+  inputData: Map<string,IInputData>;
+  entities: IEntity[];
+  models: IModel[];
+  // latestEntityId: number;
   segments: ISegment[]
   entitiesToVelocitySegments: Map<IEntity, ISegment>;
 }
@@ -178,13 +212,14 @@ function getInitialState () : IState {
     const DEFAULT_STATE : IState = {
       time: 0
     , simulating: false
-    , controllerData: new Map<string,IController[]>()
+    , inputData: new Map<string,IInputData>()
     , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
-    , latestEntityId: 0
+    , models: []
+    // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
@@ -248,7 +283,8 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
 
 function doProcessControllerInput () {
   let objectPoints = new Map<IEntity, Array<IController>>();
-  for (let [client, controllers] of STATE.controllerData) {
+  for (let [client, inputData] of STATE.inputData) {
+      let controllers = inputData.controllers;
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
         if (controller.action0.curr) {
@@ -343,9 +379,19 @@ NETWORK.bind(undefined, undefined, () => {
     Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
       // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
-      Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-        let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-      });
+      // let stuffToSend = [];
+      // // TODO(JULIAN): Send headset data to all connected clients other than the one whose headset it is!
+      // for (let [client, inputData] of STATE.inputData) {
+      //   for (let remoteClient of STATE.inputData.keys()) {
+      //     if (remoteClient !== client) {
+
+      //     }
+      //   }        
+      // }
+
+      // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+      //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      // });
 
       // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });
@@ -362,41 +408,51 @@ NETWORK.on('listening', () => {
 // Grab and store controller data
 NETWORK.on('message', (message : Buffer, remote) => {
   let client = remote.address + ':' + remote.port;
-  let controllerData = STATE.controllerData;
-  if (!controllerData.has(client)) {
+  let inputData = STATE.inputData;
+  if (!inputData.has(client)) {
     console.log("HI!");
-    controllerData.set(client, [ makeControllerFn()
-                               , makeControllerFn()
-                               ]);
+    inputData.set(client, { headset: makeHeadsetFn()
+                          , controllers: [ makeControllerFn()
+                                         , makeControllerFn() ]});
   }
 
-  // controllerData.get(client)[0].grab.last = controllerData.get(client)[0].grab.curr;
-  // controllerData.get(client)[1].grab.last = controllerData.get(client)[1].grab.curr;
+  // inputData.get(client)[0].grab.last = inputData.get(client)[0].grab.curr;
+  // inputData.get(client)[1].grab.last = inputData.get(client)[1].grab.curr;
 
   let offset = 0;
-  Vec3.set(/*out*/controllerData.get(client)[0].pos
+  Vec3.set(/*out*/inputData.get(client).headset.pos
           , message.readFloatLE(offset, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/controllerData.get(client)[0].rot
+  Quat.set(/*out*/inputData.get(client).headset.rot
           , message.readFloatLE(offset+=4, true) // w
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  controllerData.get(client)[0].grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  controllerData.get(client)[0].action0.curr = <0|1>message.readUInt8(offset+=1, true);
 
-  Vec3.set(/*out*/controllerData.get(client)[1].pos
+  Vec3.set(/*out*/inputData.get(client).controllers[0].pos
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
+  Quat.set(/*out*/inputData.get(client).controllers[0].rot
+          , message.readFloatLE(offset+=4, true) // w
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true)
+          , message.readFloatLE(offset+=4, true));
+  inputData.get(client).controllers[0].grab.curr = <0|1>message.readUInt8(offset+=4, true);
+  inputData.get(client).controllers[0].action0.curr = <0|1>message.readUInt8(offset+=1, true);
+
+  Vec3.set(/*out*/inputData.get(client).controllers[1].pos
           , message.readFloatLE(offset+=1, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/controllerData.get(client)[1].rot
+  Quat.set(/*out*/inputData.get(client).controllers[1].rot
           , message.readFloatLE(offset+=4, true) // w
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  controllerData.get(client)[1].grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  controllerData.get(client)[1].action0.curr = <0|1>message.readUInt8(offset+=1, true);
+  inputData.get(client).controllers[1].grab.curr = <0|1>message.readUInt8(offset+=4, true);
+  inputData.get(client).controllers[1].action0.curr = <0|1>message.readUInt8(offset+=1, true);
 });
 
 

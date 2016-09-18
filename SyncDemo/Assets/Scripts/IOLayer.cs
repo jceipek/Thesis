@@ -2,15 +2,25 @@ namespace Giverspace {
 using UnityEngine;
 using Valve.VR;
 public class IOLayer : MonoBehaviour {
-
     [System.Serializable]
-    class ControllerInfo {
-        [SerializeField] public SteamVR_TrackedObject TrackedObject;
+    class TrackedObjectInfo {
         public Vector3 position;
         public Quaternion rotation;
+    }
+
+    [System.Serializable]
+    class ControllerInfo : TrackedObjectInfo {
         public bool grabbed;
         public bool action0;
     }
+
+    [SerializeField] SteamVR_TrackedObject _headsetTrackedObject;
+    TrackedObjectInfo _headsetData = new TrackedObjectInfo();
+    [SerializeField] SteamVR_TrackedObject _controller0TrackedObject;
+    ControllerInfo _controller0Data = new ControllerInfo();
+    [SerializeField] SteamVR_TrackedObject _controller1TrackedObject;
+    ControllerInfo _controller1Data = new ControllerInfo();
+
 
     [SerializeField] GameObject _objectPrefab;
     [SerializeField] GameObject _lineSegmentPrefab;
@@ -18,8 +28,6 @@ public class IOLayer : MonoBehaviour {
     GameObject[] _objects = new GameObject[1000];
     LineSegment[] _lineSegments = new LineSegment[1000]; 
     VelocityColorEntity[] _velocityColorEntities = new VelocityColorEntity[1000]; 
-
-    [SerializeField] ControllerInfo[] _controllerInfos;
 
     public void ProcessMessage (NetMessage message) {
         switch (message.MessageType) {
@@ -86,46 +94,50 @@ public class IOLayer : MonoBehaviour {
     //     SteamVR_Render.instance.trackingSpace = ETrackingUniverseOrigin.TrackingUniverseRawAndUncalibrated;
     // }
 
-    void OnEnable()
-    {
+    void OnEnable() {
         SteamVR_Utils.Event.Listen("new_poses", OnNewPoses);
     }
 
-    void OnDisable()
-    {
+    void OnDisable() {
         SteamVR_Utils.Event.Remove("new_poses", OnNewPoses);
     }
 
     // Parse and dispatch a PositionGeometry() call with the new controller pose.
     private void OnNewPoses(params object[] args) {
         var poses = (TrackedDevicePose_t[])args[0];
+        UpdateDataForTrackedObject (_headsetTrackedObject, poses, _headsetData);
+        UpdateDataForTrackedObject (_controller0TrackedObject, poses, _controller0Data);
+        UpdateDataForTrackedObject (_controller1TrackedObject, poses, _controller1Data);
 
-        foreach (var controllerInfo in _controllerInfos) {
-            var trackedObject = controllerInfo.TrackedObject;
-            if (trackedObject.index == SteamVR_TrackedObject.EIndex.None)
-                continue;
-            int i = (int)trackedObject.index;
-            if (poses.Length <= i)
-                continue;
+        NetManager.G.SendInputData(_headsetData.position, _headsetData.rotation,
+                                   _controller0Data.position, _controller0Data.rotation, _controller0Data.grabbed, _controller0Data.action0,
+                                   _controller1Data.position, _controller1Data.rotation, _controller1Data.grabbed, _controller1Data.action0);
+    }
 
-            if (!poses[i].bDeviceIsConnected)
-                continue;
+    void UpdateDataForTrackedObject (SteamVR_TrackedObject trackedObject, TrackedDevicePose_t[] withPoses, TrackedObjectInfo data) {
+        if (trackedObject.index == SteamVR_TrackedObject.EIndex.None)
+            return;
+        int i = (int)trackedObject.index;
+        if (withPoses.Length <= i)
+            return;
 
-            if (!poses[i].bPoseIsValid)
-                continue;
+        if (!withPoses[i].bDeviceIsConnected)
+            return;
 
-            SteamVR_Utils.RigidTransform pose = new SteamVR_Utils.RigidTransform(poses[i].mDeviceToAbsoluteTracking);   
-            controllerInfo.position = pose.pos;
-            controllerInfo.rotation = pose.rot;
+        if (!withPoses[i].bPoseIsValid)
+            return;
 
-             SteamVR_Controller.Device device = SteamVR_Controller.Input((int)trackedObject.index);
+        SteamVR_Utils.RigidTransform pose = new SteamVR_Utils.RigidTransform(withPoses[i].mDeviceToAbsoluteTracking);   
+        data.position = pose.pos;
+        data.rotation = pose.rot;
+
+        var controllerInfo = data as ControllerInfo;
+        if (controllerInfo != null) {
+            SteamVR_Controller.Device device = SteamVR_Controller.Input((int)trackedObject.index);
             //  controllerInfo.grabbed = device.GetHairTrigger();
-             controllerInfo.grabbed = device.GetPress(SteamVR_Controller.ButtonMask.Trigger);
-             controllerInfo.action0 = device.GetPress(SteamVR_Controller.ButtonMask.Touchpad);
-
+            controllerInfo.grabbed = device.GetPress(SteamVR_Controller.ButtonMask.Trigger);
+            controllerInfo.action0 = device.GetPress(SteamVR_Controller.ButtonMask.Touchpad);
         }
-        NetManager.G.SendControllerPositions(_controllerInfos[0].position, _controllerInfos[0].rotation, _controllerInfos[0].grabbed, _controllerInfos[0].action0,
-                                             _controllerInfos[1].position, _controllerInfos[1].rotation, _controllerInfos[1].grabbed, _controllerInfos[1].action0);
     }
 
 
