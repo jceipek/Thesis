@@ -25,9 +25,11 @@ public class IOLayer : MonoBehaviour {
     [SerializeField] GameObject _objectPrefab;
     [SerializeField] GameObject _lineSegmentPrefab;
     [SerializeField] GameObject _velocityColorEntityPrefab;
+    [SerializeField] GameObject _modelPrefab;
     GameObject[] _objects = new GameObject[1000];
     LineSegment[] _lineSegments = new LineSegment[1000]; 
     VelocityColorEntity[] _velocityColorEntities = new VelocityColorEntity[1000]; 
+    Model[] _models = new Model[1000];
 
     public void ProcessMessage (NetMessage message) {
         switch (message.MessageType) {
@@ -42,6 +44,9 @@ public class IOLayer : MonoBehaviour {
                 break;
             case MessageType.Segment:
                 ProcessSegmentMessage(message);
+                break;
+            case MessageType.PositionRotationScaleModel:
+                ProcessPositionRotationScaleModelMessage(message);
                 break;
         }
     }
@@ -87,6 +92,17 @@ public class IOLayer : MonoBehaviour {
             _lineSegments[message.ObjectId].StartPoint = message.Position;
             _lineSegments[message.ObjectId].EndPoint = message.Destination;
             _lineSegments[message.ObjectId].SetColor(message.Color);
+        }
+    }
+
+    void ProcessPositionRotationScaleModelMessage (NetMessage message) {
+        if (message.ObjectId < _lineSegments.Length) {
+            // Debug.Log("ID: "+message.ObjectId);
+            if (_models[message.ObjectId] == null) {
+                _models[message.ObjectId] = (Instantiate(_modelPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<Model>();
+            }
+            // TODO(JULIAN): Make ModelType be something other than a ushort in the protocol; update the generator to handle this situation
+            _models[message.ObjectId].UpdateData((ModelType)message.ModelType, message.Position, message.Rotation, message.Scale);
         }
     }
 

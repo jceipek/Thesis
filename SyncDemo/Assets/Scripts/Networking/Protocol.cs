@@ -5,8 +5,9 @@ public enum MessageType {
   Unknown = -1,
   Position = 0X00,
   PositionRotation = 0X01,
-  PositionRotationVelocityColor = 0X02,
-  Segment = 0X03
+  PositionRotationScaleModel = 0X02,
+  PositionRotationVelocityColor = 0X03,
+  Segment = 0X04
 }
 
 public struct NetMessage {
@@ -15,6 +16,8 @@ public struct NetMessage {
 	public ushort ObjectId;
 	public Vector3 Position;
 	public Quaternion Rotation;
+	public ushort ModelType;
+	public Vector3 Scale;
 	public Vector3 Velocity;
 	public Color32 Color;
 	public Vector3 Destination;
@@ -84,6 +87,16 @@ public struct NetMessage {
 		                        Rotation = QuaternionFromBuff(data, ref offset) };
 	}
 
+	private static NetMessage DecodePositionRotationScaleModel (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.PositionRotationScaleModel,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        ObjectId = UInt16FromBuff(data, ref offset),
+		                        ModelType = UInt16FromBuff(data, ref offset),
+		                        Position = Vector3FromBuff(data, ref offset),
+		                        Rotation = QuaternionFromBuff(data, ref offset),
+		                        Scale = Vector3FromBuff(data, ref offset) };
+	}
+
 	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotationVelocityColor,
 		                        SequenceNumber = Int32FromBuff(data, ref offset),
@@ -117,6 +130,12 @@ public struct NetMessage {
   				case MessageType.PositionRotation:
   					if (messageLength == 35) {
   						decodedMessage = DecodePositionRotation(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.PositionRotationScaleModel:
+  					if (messageLength == 49) {
+  						decodedMessage = DecodePositionRotationScaleModel(buffer, ref offset);
   						return true;
   					}
   					break;

@@ -64,6 +64,8 @@ const HOST = '192.168.1.255'; // Subnet broadcast
 
 const NETWORK = DGRAM.createSocket('udp4');
 
+const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
+
 let _interval : null|NodeJS.Timer = null;
 const _sendBuffer = Buffer.allocUnsafe(1024);
 const FPS = 90;
@@ -72,39 +74,51 @@ let _latestEntityId = 0;
 const STATE : IState = getInitialState();
 
 
-function sendFn (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
+function sendBroadcastFn (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
+}
+
+function sendTargetFn (message : Buffer, messageLength: number, host: string, port: number, callback : (err: any, bytes: number) => void) {
+  NETWORK.send(message, 0, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
 let _currSeqId = 0;
 function sendEntityPosition (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionMsg(_sendBuffer, 0, MESSAGE_TYPE.Position, _currSeqId, obj.id, obj.pos);
   _currSeqId++;
-  sendFn(_sendBuffer, messageLength, callback);
+  sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
 function sendEntityPositionRotation (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionRotationMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, entity.id, entity.pos, entity.rot);
   _currSeqId++;
-  sendFn(_sendBuffer, messageLength, callback);
+  sendBroadcastFn(_sendBuffer, messageLength, callback);
+}
+
+function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3);
+  _currSeqId++;
+  let [host, port] = destination.split(':');
+  sendTargetFn(_sendBuffer, messageLength, host, parseInt(port, 10), callback);
 }
 
 function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionRotationVelocityColorMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationVelocityColor, _currSeqId, entity.id, entity.pos, entity.rot, entity.vel, entity.color);
   _currSeqId++;
-  sendFn(_sendBuffer, messageLength, callback);
+  sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
 function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
-  sendFn(_sendBuffer, messageLength, callback);
+  sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
 const sendEntityPositionFn = Promise.promisify(sendEntityPosition);
 const sendEntityPositionRotationFn = Promise.promisify(sendEntityPositionRotation);
 const sendEntityPositionRotationVelocityColorFn = Promise.promisify(sendEntityPositionRotationVelocityColor);
 const sendSegmentFn = Promise.promisify(sendSegment);
+const sendAvatarInfoFn = Promise.promisify(sendAvatarInfo);
 
 function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: IColor, type : ENTITY_TYPE) : IEntity {
   return <IEntity>{
@@ -379,15 +393,20 @@ NETWORK.bind(undefined, undefined, () => {
     Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
       // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
-      // let stuffToSend = [];
-      // // TODO(JULIAN): Send headset data to all connected clients other than the one whose headset it is!
-      // for (let [client, inputData] of STATE.inputData) {
-      //   for (let remoteClient of STATE.inputData.keys()) {
-      //     if (remoteClient !== client) {
+      let stuffToSend = [];
+      for (let remoteClient of STATE.inputData.keys()) {
+        for (let [client, inputData] of STATE.inputData) {
+          if (remoteClient !== client) {
+            stuffToSend.push({destination: remoteClient, data: inputData})
+          }
+        }
+      }
 
-      //     }
-      //   }        
-      // }
+
+      Promise.each(stuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
+        let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+      });
+
 
       // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
       //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;

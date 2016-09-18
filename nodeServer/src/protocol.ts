@@ -8,8 +8,9 @@ export const enum MESSAGE_TYPE {
   Unknown = -1,
   Position = 0X00,
   PositionRotation = 0X01,
-  PositionRotationVelocityColor = 0X02,
-  Segment = 0X03
+  PositionRotationScaleModel = 0X02,
+  PositionRotationVelocityColor = 0X03,
+  Segment = 0X04
 }
 
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
@@ -33,6 +34,24 @@ export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number
   offset = buf.writeFloatLE(rot[1], offset, true);
   offset = buf.writeFloatLE(rot[2], offset, true);
   offset = buf.writeFloatLE(rot[3], offset, true);
+  return offset;
+}
+
+export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : number, pos : IVector3, rot : IQuaternion, scale : IVector3) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  offset = buf.writeUInt16LE(objectId, offset, true);
+  offset = buf.writeUInt16LE(modelType, offset, true);
+  offset = buf.writeFloatLE(pos[0], offset, true);
+  offset = buf.writeFloatLE(pos[1], offset, true);
+  offset = buf.writeFloatLE(pos[2], offset, true);
+  offset = buf.writeFloatLE(rot[0], offset, true);
+  offset = buf.writeFloatLE(rot[1], offset, true);
+  offset = buf.writeFloatLE(rot[2], offset, true);
+  offset = buf.writeFloatLE(rot[3], offset, true);
+  offset = buf.writeFloatLE(scale[0], offset, true);
+  offset = buf.writeFloatLE(scale[1], offset, true);
+  offset = buf.writeFloatLE(scale[2], offset, true);
   return offset;
 }
 
