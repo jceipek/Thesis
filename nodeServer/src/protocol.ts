@@ -13,6 +13,13 @@ export const enum MESSAGE_TYPE {
   Segment = 0X04
 }
 
+export const enum MODEL_TYPE {
+  NONE = 0X00,
+  HEADSET = 0X01,
+  BASIC_CONTROLLER = 0X02,
+  CUBE = 0X03
+}
+
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
@@ -37,7 +44,7 @@ export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number
   return offset;
 }
 
-export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : number, pos : IVector3, rot : IQuaternion, scale : IVector3) {
+export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);

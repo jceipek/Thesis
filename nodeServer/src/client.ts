@@ -1,4 +1,4 @@
-import {MESSAGE_TYPE} from './protocol'
+import {MESSAGE_TYPE, MODEL_TYPE} from './protocol'
 import * as Protocol from './protocol'
 import * as FS from 'fs'
 import * as Promise from 'bluebird'
@@ -50,12 +50,6 @@ const enum ENTITY_TYPE {
   CLONER = 1
 }
 
-const enum MODEL_TYPE {
-  HEADSET = 0,
-  BASIC_CONTROLLER = 1,
-  CUBE = 2
-}
-
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
@@ -98,8 +92,17 @@ function sendEntityPositionRotation (entity : IEntity, callback : () => (err: an
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3);
   _currSeqId++;
-  let [host, port] = destination.split(':');
-  sendTargetFn(_sendBuffer, messageLength, host, parseInt(port, 10), callback);
+  let [host, portString] = destination.split(':');
+  let port = parseInt(portString, 10);
+  let controller0 = inputData.controllers[0];
+  let controller1 = inputData.controllers[1];
+  sendTargetFn(_sendBuffer, messageLength, host, port, () => {
+    const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.BASIC_CONTROLLER, controller0.pos, controller0.rot, UNIT_VECTOR3);
+    sendTargetFn(_sendBuffer, messageLength, host, port, () => {
+      const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.BASIC_CONTROLLER, controller1.pos, controller1.rot, UNIT_VECTOR3);
+      sendTargetFn(_sendBuffer, messageLength, host, port, callback);
+    });
+  });
 }
 
 function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : () => (err: any, bytes: number) => void) {

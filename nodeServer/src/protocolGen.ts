@@ -24,6 +24,7 @@ var typeLengths = {
 
 const TYPE_INFO = {
   'MessageType': {js: 'MESSAGE_TYPE', cs: 'MessageType', len: 1}
+, 'ModelType': {js: 'MODEL_TYPE', cs: 'ModelType', len: 2}
 , 'Float': {js: 'number', cs: 'float', len: 4}
 , 'Int32': {js: 'number', cs: 'int', len: 4}
 , 'UInt16': {js: 'number', cs: 'ushort', len: 2}
@@ -42,6 +43,13 @@ const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
 const COLOR_IDENT = {cs: 'Color', js: 'color'}
 const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
 const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
+
+const MODEL_TYPES = [
+  {cs: 'None', js: 'NONE'}
+, {cs: 'Headset', js: 'HEADSET'}
+, {cs: 'BasicController', js: 'BASIC_CONTROLLER'}
+, {cs: 'Cube', js: 'CUBE'}
+]
 
 const MESSAGES : IMessage[] = [
   { name: 'Position'
@@ -63,7 +71,7 @@ const MESSAGES : IMessage[] = [
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
             , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
-            , {ident: MODEL_TYPE_IDENT, customType: 'UInt16'}
+            , {ident: MODEL_TYPE_IDENT, customType: 'ModelType'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
             , {ident: SCALE_IDENT, customType: 'Vector3'}
@@ -95,6 +103,9 @@ function jsWriteForType (type: string, identifier: string) {
   switch (type) {
     case 'MessageType':
       output += `  offset = buf.writeInt8(${identifier}, offset, true);\n`
+      break;
+    case 'ModelType':
+      output += `  offset = buf.writeUInt16LE(${identifier}, offset, true);\n`
       break;
     case 'Vector3':
       output += `  offset = buf.writeFloatLE(${identifier}[0], offset, true);\n` // x
@@ -149,6 +160,10 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output += "export const enum MODEL_TYPE {\n";
+  output += MODEL_TYPES.map((modelTypes, index) => `  ${modelTypes.js} = ${numHex(index)}`).join(',\n');
+  output += "\n}\n\n";
+
   output += messages.map((message) => jsWriteForMessage(message)).join('\n')+'\n';
 
   return output;
@@ -173,6 +188,10 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output += "public enum ModelType {\n";
+  output += MODEL_TYPES.map((modelTypes, index) => `  ${modelTypes.cs} = ${numHex(index)}`).join(',\n');
+  output += "\n}\n\n";
+
   function getIdentifiers (message : IMessage) {
     return message.fields.map((field) => [field.ident.cs, TYPE_INFO[field.customType].cs]);
   }
@@ -185,6 +204,11 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   `\tstatic MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   \t\tMessageType res = (MessageType)data[offset];
   \t\toffset += 1;
+  \t\treturn res;
+  \t}
+
+  \tstatic ModelType ModelTypeFromBuff (byte[] data, ref int offset) {
+  \t\tModelType res = (ModelType)UInt16FromBuff(data, ref offset);
   \t\treturn res;
   \t}
 

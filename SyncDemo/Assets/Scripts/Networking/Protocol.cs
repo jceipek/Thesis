@@ -10,13 +10,20 @@ public enum MessageType {
   Segment = 0X04
 }
 
+public enum ModelType {
+  None = 0X00,
+  Headset = 0X01,
+  BasicController = 0X02,
+  Cube = 0X03
+}
+
 public struct NetMessage {
 	public MessageType MessageType;
 	public int SequenceNumber;
 	public ushort ObjectId;
 	public Vector3 Position;
 	public Quaternion Rotation;
-	public ushort ModelType;
+	public ModelType ModelType;
 	public Vector3 Scale;
 	public Vector3 Velocity;
 	public Color32 Color;
@@ -24,6 +31,11 @@ public struct NetMessage {
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
+  		return res;
+  	}
+
+  	static ModelType ModelTypeFromBuff (byte[] data, ref int offset) {
+  		ModelType res = (ModelType)UInt16FromBuff(data, ref offset);
   		return res;
   	}
 
@@ -91,7 +103,7 @@ public struct NetMessage {
 		return new NetMessage { MessageType = MessageType.PositionRotationScaleModel,
 		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
-		                        ModelType = UInt16FromBuff(data, ref offset),
+		                        ModelType = ModelTypeFromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Rotation = QuaternionFromBuff(data, ref offset),
 		                        Scale = Vector3FromBuff(data, ref offset) };
