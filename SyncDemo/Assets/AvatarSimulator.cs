@@ -5,12 +5,11 @@ public class AvatarSimulator : MonoBehaviour {
 	[SerializeField] Transform[] _eyelids = new Transform[2];
 	Vector3[] _eyeballOrigins;
 	bool _hasBeenInitialized = false;
-	[SerializeField] float _eyeballBoundaryRadius;
+	[SerializeField] float _eyeballBoundaryRadius = 0.03f;
 
 	Vector3 _oldForward;
 	Vector3 _oldRight;
 	Vector3 _oldUp;
-	[SerializeField] Vector3 _rotation = new Vector3(0f,10f,0f);
 	[SerializeField] float _eyeMovementAmplifier = 1f;
 	[SerializeField] int _smoothingSamples = 3;
 	
@@ -45,7 +44,6 @@ public class AvatarSimulator : MonoBehaviour {
 		_oldRight = transform.right;
 		_oldUp = transform.up;
 
-		transform.Rotate(_rotation*Time.deltaTime);
 
 		switch (_blinkState) {
 			case BlinkState.Waiting:
@@ -95,12 +93,9 @@ public class AvatarSimulator : MonoBehaviour {
 	}
 
 	void OnDrawGizmos () {
-		if (!_hasBeenInitialized) {
-			Init();
-		}
 		Gizmos.color = Color.green;
 		for (int i = 0; i < _eyeballOrigins.Length; i++) {
-			Gizmos.DrawWireSphere(_eyeballOrigins[i], _eyeballBoundaryRadius);
+			Gizmos.DrawWireSphere(_eyeballs[i].position, _eyeballBoundaryRadius);
 		}
 	}
 }
