@@ -26,9 +26,10 @@ public class AvatarSimulator : MonoBehaviour {
 	BlinkState _blinkState = BlinkState.Waiting;
 
 	Vector3 _movingAverageOffset = Vector3.zero;
+
 	void Update () {
 		if (!_hasBeenInitialized) {
-			return;
+			Init();
 		}
 		var inDirOfNew = (transform.forward - _oldForward);
 
