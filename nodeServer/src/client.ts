@@ -162,6 +162,7 @@ interface IController {
   rot: IQuaternion;
   grab: IButtonState;
   action0: IButtonState;
+  action1: IButtonState;
   pickedUpObject: IEntity|null;
   pickedUpObjectTime: Date;
   pickedUpObjectOffset: IVector3;
@@ -179,6 +180,7 @@ function makeControllerFn () : IController {
          , rot: Quat.create()
          , grab: { curr: 0, last: 0 }
          , action0: { curr: 0, last: 0 }
+         , action1: { curr: 0, last: 0 }
          , pickedUpObject: null
          , pickedUpObjectTime: null
          , pickedUpObjectOffset: Vec3.create()
@@ -190,6 +192,13 @@ function makeHeadsetFn () : IHeadset {
   return { pos: Vec3.create()
          , rot: Quat.create()
          , id: _latestEntityId++ };
+}
+
+function makeRecordingFn (objectId) : IRecording {
+  return { objectId: objectId
+         , positions: []
+         , rotations: []
+         , playbackIndex: 0};
 }
 
 // let triangleWave = function (t, halfPeriod) {
@@ -210,6 +219,13 @@ function doesControllerOverlapObject (controller, obj) {
 }
 
 
+interface IRecording {
+  objectId: number;
+  positions: IVector3[];
+  rotations: IQuaternion[];
+  playbackIndex: number;
+}
+
 interface IState {
   time: number;
   simulating: boolean;
@@ -217,7 +233,8 @@ interface IState {
   entities: IEntity[];
   models: IModel[];
   // latestEntityId: number;
-  segments: ISegment[]
+  segments: ISegment[];
+  idsTorecordings: Map<number,IRecording>; // Object Id -> Recording
   entitiesToVelocitySegments: Map<IEntity, ISegment>;
 }
 
@@ -244,6 +261,7 @@ function getInitialState () : IState {
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
               //  ]
+    , idsTorecordings: new Map<number,IRecording>() // Object Id -> Recording
     , entitiesToVelocitySegments: new Map<IEntity, ISegment>()
     };
     return DEFAULT_STATE;
@@ -324,6 +342,26 @@ function doProcessControllerInput () {
           }
         }
 
+        if (controller.action1.curr && controller.pickedUpObject != null) {
+          let objectToRecord = controller.pickedUpObject;
+          if (!STATE.idsTorecordings.has(objectToRecord.id)) {
+            STATE.idsTorecordings.set(objectToRecord.id, makeRecordingFn(objectToRecord.id));
+          }
+          let myRecording = STATE.idsTorecordings.get(objectToRecord.id);
+          if (!controller.action1.last) {
+            // just started recording anew, so kill existing recording
+            myRecording.positions.length = 0;
+            myRecording.rotations.length = 0;
+            myRecording.playbackIndex = 0;
+
+            myRecording.positions.push(Vec3.clone(objectToRecord.pos)); // Basis
+            myRecording.rotations.push(Quat.clone(objectToRecord.rot)); // Basis
+          } else {
+            myRecording.positions.push(Vec3.clone(objectToRecord.pos));
+            myRecording.rotations.push(Quat.clone(objectToRecord.rot));
+          }
+        }
+
         if (!controller.grab.curr) {
           controller.pickedUpObject = null;
         } else if (controller.pickedUpObject != null) {
@@ -336,6 +374,7 @@ function doProcessControllerInput () {
         }
         controller.grab.last = controller.grab.curr; // So that we can grab things
         controller.action0.last = controller.action0.curr;
+        controller.action1.last = controller.action1.curr;
       }
   }
 
@@ -387,7 +426,17 @@ NETWORK.bind(undefined, undefined, () => {
       const entities = STATE.entities;
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
-        Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
+        // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
+        if (STATE.idsTorecordings.has(entity.id)) {
+          let currRecording = STATE.idsTorecordings.get(entity.id);
+          // if (currRecording.playbackIndex < currRecording.positions.length-1) {
+          if (currRecording.playbackIndex < currRecording.positions.length) {
+            // Vec3.add(entity.pos, entity.pos, Vec3.sub(_tempVec, currRecording.positions[currRecording.playbackIndex+1], currRecording.positions[currRecording.playbackIndex]));
+            // Quat.conjugate()
+            Vec3.copy(entity.pos, currRecording.positions[currRecording.playbackIndex]);
+            Quat.copy(entity.rot, currRecording.rotations[currRecording.playbackIndex]);
+          }
+        }
       }
     }
 
@@ -463,6 +512,7 @@ NETWORK.on('message', (message : Buffer, remote) => {
           , message.readFloatLE(offset+=4, true));
   inputData.get(client).controllers[0].grab.curr = <0|1>message.readUInt8(offset+=4, true);
   inputData.get(client).controllers[0].action0.curr = <0|1>message.readUInt8(offset+=1, true);
+  inputData.get(client).controllers[0].action1.curr = <0|1>message.readUInt8(offset+=1, true);
 
   Vec3.set(/*out*/inputData.get(client).controllers[1].pos
           , message.readFloatLE(offset+=1, true)
@@ -475,6 +525,7 @@ NETWORK.on('message', (message : Buffer, remote) => {
           , message.readFloatLE(offset+=4, true));
   inputData.get(client).controllers[1].grab.curr = <0|1>message.readUInt8(offset+=4, true);
   inputData.get(client).controllers[1].action0.curr = <0|1>message.readUInt8(offset+=1, true);
+  inputData.get(client).controllers[1].action1.curr = <0|1>message.readUInt8(offset+=1, true);
 });
 
 
