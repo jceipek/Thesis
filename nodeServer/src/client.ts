@@ -52,8 +52,8 @@ const enum ENTITY_TYPE {
 
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-// const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '169.254.255.255'; // Subnet broadcast
+// const HOST = '192.168.1.255'; // Subnet broadcast
 // const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
@@ -197,6 +197,8 @@ function makeHeadsetFn () : IHeadset {
 function makeRecordingFn (objectId) : IRecording {
   return { objectId: objectId
          , positions: []
+         , posDeltas: []
+         , rotDeltas: []
          , rotations: []
          , playbackIndex: 0};
 }
@@ -222,6 +224,8 @@ function doesControllerOverlapObject (controller, obj) {
 interface IRecording {
   objectId: number;
   positions: IVector3[];
+  posDeltas: IVector3[];
+  rotDeltas: IQuaternion[];
   rotations: IQuaternion[];
   playbackIndex: number;
 }
@@ -234,7 +238,7 @@ interface IState {
   models: IModel[];
   // latestEntityId: number;
   segments: ISegment[];
-  idsTorecordings: Map<number,IRecording>; // Object Id -> Recording
+  idsTorecordings: Map<string,IRecording>; // Object Id -> Recording
   entitiesToVelocitySegments: Map<IEntity, ISegment>;
 }
 
@@ -261,7 +265,7 @@ function getInitialState () : IState {
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
               //  ]
-    , idsTorecordings: new Map<number,IRecording>() // Object Id -> Recording
+    , idsTorecordings: new Map<string,IRecording>() // Object Id -> Recording
     , entitiesToVelocitySegments: new Map<IEntity, ISegment>()
     };
     return DEFAULT_STATE;
@@ -344,19 +348,37 @@ function doProcessControllerInput () {
 
         if (controller.action1.curr && controller.pickedUpObject != null) {
           let objectToRecord = controller.pickedUpObject;
-          if (!STATE.idsTorecordings.has(objectToRecord.id)) {
-            STATE.idsTorecordings.set(objectToRecord.id, makeRecordingFn(objectToRecord.id));
+          if (!STATE.idsTorecordings.has(objectToRecord.id.toString())) {
+            STATE.idsTorecordings.set(objectToRecord.id.toString(), makeRecordingFn(objectToRecord.id));
           }
-          let myRecording = STATE.idsTorecordings.get(objectToRecord.id);
+          let myRecording = STATE.idsTorecordings.get(objectToRecord.id.toString());
           if (!controller.action1.last) {
             // just started recording anew, so kill existing recording
             myRecording.positions.length = 0;
             myRecording.rotations.length = 0;
+            myRecording.posDeltas.length = 0;
+            myRecording.rotDeltas.length = 0;
             myRecording.playbackIndex = 0;
 
             myRecording.positions.push(Vec3.clone(objectToRecord.pos)); // Basis
             myRecording.rotations.push(Quat.clone(objectToRecord.rot)); // Basis
-          } else {
+          } else if (myRecording.positions.length > 0) {
+            myRecording.posDeltas.push(Vec3.clone(Vec3.transformQuat(_tempVec,
+                                                                     Vec3.sub(_tempVec,
+                                                                              objectToRecord.pos,
+                                                                              myRecording.positions[myRecording.positions.length - 1]),
+                                                                     Quat.invert(_tempQuat,
+                                                                                 objectToRecord.rot))));
+            
+            // myRecording.rotDeltas.push(Quat.clone(Quat.mul(_tempQuat,
+            //                                                objectToRecord.rot,
+            //                                                Quat.invert(_tempQuat, 
+            //                                                            myRecording.rotations[myRecording.rotations.length - 1]))));
+            myRecording.rotDeltas.push(Quat.clone(Quat.mul(_tempQuat,
+                                                           Quat.invert(_tempQuat, 
+                                                                       myRecording.rotations[myRecording.rotations.length - 1]),
+                                                           objectToRecord.rot)));
+
             myRecording.positions.push(Vec3.clone(objectToRecord.pos));
             myRecording.rotations.push(Quat.clone(objectToRecord.rot));
           }
@@ -388,19 +410,19 @@ function doProcessControllerInput () {
 
       Quat.mul(/*out*/controller.pickedUpObject.rot, controller.rot, controller.pickedUpObjectRotOffset);
     }
-    if (controllerList.length > 1) {
-      let controller = controllerList[1];
-      Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
-      Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
+    // if (controllerList.length > 1) {
+    //   let controller = controllerList[1];
+    //   Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
+    //   Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
 
-      // if (!STATE.entitiesToVelocitySegments.has(entity)) {
-      //   let segment = makeSegmentFn(entity.pos, Vec3.clone(controller.pos), new Uint8Array([0x00,0x00,0xFF,0xFF]));
-      //   STATE.segments.push(segment);
-      //   STATE.entitiesToVelocitySegments.set(entity, segment);
-      //   console.log("Make Seg");
-      // }
-      // Vec3.copy(/*out*/STATE.entitiesToVelocitySegments.get(entity).end, controller.pos);
-    }
+    //   // if (!STATE.entitiesToVelocitySegments.has(entity)) {
+    //   //   let segment = makeSegmentFn(entity.pos, Vec3.clone(controller.pos), new Uint8Array([0x00,0x00,0xFF,0xFF]));
+    //   //   STATE.segments.push(segment);
+    //   //   STATE.entitiesToVelocitySegments.set(entity, segment);
+    //   //   console.log("Make Seg");
+    //   // }
+    //   // Vec3.copy(/*out*/STATE.entitiesToVelocitySegments.get(entity).end, controller.pos);
+    // }
   }
 
 
@@ -424,17 +446,36 @@ NETWORK.bind(undefined, undefined, () => {
 
     if (STATE.simulating) {
       const entities = STATE.entities;
+
+      simulate:
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
+        for (let [client, inputData] of STATE.inputData) {
+            let controllers = inputData.controllers;
+            for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
+              let controller = controllers[controllerIndex];
+              if (controller.pickedUpObject === entity) {
+                continue simulate;
+              }
+            }
+        }
         // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
-        if (STATE.idsTorecordings.has(entity.id)) {
-          let currRecording = STATE.idsTorecordings.get(entity.id);
+        if (STATE.idsTorecordings.has(entity.id.toString())) {
+          let currRecording = STATE.idsTorecordings.get(entity.id.toString());
           // if (currRecording.playbackIndex < currRecording.positions.length-1) {
-          if (currRecording.playbackIndex < currRecording.positions.length) {
+          if (currRecording.playbackIndex < currRecording.posDeltas.length) {
             // Vec3.add(entity.pos, entity.pos, Vec3.sub(_tempVec, currRecording.positions[currRecording.playbackIndex+1], currRecording.positions[currRecording.playbackIndex]));
             // Quat.conjugate()
-            Vec3.copy(entity.pos, currRecording.positions[currRecording.playbackIndex]);
-            Quat.copy(entity.rot, currRecording.rotations[currRecording.playbackIndex]);
+
+            Vec3.add(entity.pos,
+                     entity.pos,
+                     Vec3.transformQuat(_tempVec, currRecording.posDeltas[currRecording.playbackIndex], entity.rot));
+            Quat.mul(entity.rot, entity.rot, currRecording.rotDeltas[currRecording.playbackIndex]);
+            // Vec3.copy(entity.pos, currRecording.positions[currRecording.playbackIndex]);
+            // Quat.copy(entity.rot, currRecording.rotations[currRecording.playbackIndex]);
+            currRecording.playbackIndex++;
+          } else {
+            currRecording.playbackIndex = 0;
           }
         }
       }
