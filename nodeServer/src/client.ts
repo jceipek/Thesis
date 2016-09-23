@@ -52,8 +52,8 @@ const enum ENTITY_TYPE {
 
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '169.254.255.255'; // Subnet broadcast
+const HOST = '192.168.1.255'; // Subnet broadcast
 // const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
@@ -326,10 +326,11 @@ function doProcessControllerInput () {
       let controllers = inputData.controllers;
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
-        if (controller.action0.curr) {
-          STATE.simulating = true;
+        if (controller.action0.curr && !controller.action0.last) {
+          STATE.simulating = !STATE.simulating;
+          console.log(STATE.simulating);
         } else if (!controller.action0.curr && controller.action0.last) {
-          STATE.simulating = false;
+          // STATE.simulating = false;
         }
         if (controller.grab.curr && !controller.grab.last) {
           let closestEntity = getClosestEntityToPoint(controller.pos);
@@ -467,12 +468,12 @@ NETWORK.bind(undefined, undefined, () => {
             // Vec3.add(entity.pos, entity.pos, Vec3.sub(_tempVec, currRecording.positions[currRecording.playbackIndex+1], currRecording.positions[currRecording.playbackIndex]));
             // Quat.conjugate()
 
-            Vec3.add(entity.pos,
-                     entity.pos,
-                     Vec3.transformQuat(_tempVec, currRecording.posDeltas[currRecording.playbackIndex], entity.rot));
-            Quat.mul(entity.rot, entity.rot, currRecording.rotDeltas[currRecording.playbackIndex]);
-            // Vec3.copy(entity.pos, currRecording.positions[currRecording.playbackIndex]);
-            // Quat.copy(entity.rot, currRecording.rotations[currRecording.playbackIndex]);
+            // Vec3.add(entity.pos,
+            //          entity.pos,
+            //          Vec3.transformQuat(_tempVec, currRecording.posDeltas[currRecording.playbackIndex], entity.rot));
+            // Quat.mul(entity.rot, entity.rot, currRecording.rotDeltas[currRecording.playbackIndex]);
+            Vec3.copy(entity.pos, currRecording.positions[currRecording.playbackIndex]);
+            Quat.copy(entity.rot, currRecording.rotations[currRecording.playbackIndex]);
             currRecording.playbackIndex++;
           } else {
             currRecording.playbackIndex = 0;
