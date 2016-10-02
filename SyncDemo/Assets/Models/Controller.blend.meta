@@ -1,22 +1,72 @@
 fileFormatVersion: 2
-guid: 9a84f05edf464497f994a0eb30163684
-timeCreated: 1474264394
+guid: cc326bc9e6b1141ce8850fa7d551bf8f
+timeCreated: 1475449635
 licenseType: Pro
 ModelImporter:
   serializedVersion: 19
   fileIDToRecycleName:
-    100000: //RootNode
-    100002: Sphere
-    100004: whole_model_group1
-    400000: //RootNode
-    400002: Sphere
-    400004: whole_model_group1
-    2300000: Sphere
-    2300002: whole_model_group1
-    3300000: Sphere
-    3300002: whole_model_group1
-    4300000: Sphere
-    4300002: whole_model_group1
+    100000: A_Marker
+    100002: A_Pointer
+    100004: A_Vacuum
+    100006: A_Wrench
+    100008: body_group1
+    100010: l_gripper_group1
+    100012: LED_group1
+    100014: menu_but_group1
+    100016: r_gripper_group1
+    100018: sys_but_group1
+    100020: trackpad_group1
+    100022: trigger_group1
+    100024: //RootNode
+    400000: A_Marker
+    400002: A_Pointer
+    400004: A_Vacuum
+    400006: A_Wrench
+    400008: body_group1
+    400010: l_gripper_group1
+    400012: LED_group1
+    400014: menu_but_group1
+    400016: r_gripper_group1
+    400018: sys_but_group1
+    400020: trackpad_group1
+    400022: trigger_group1
+    400024: //RootNode
+    2300000: A_Marker
+    2300002: A_Pointer
+    2300004: A_Vacuum
+    2300006: A_Wrench
+    2300008: body_group1
+    2300010: l_gripper_group1
+    2300012: LED_group1
+    2300014: menu_but_group1
+    2300016: r_gripper_group1
+    2300018: sys_but_group1
+    2300020: trackpad_group1
+    2300022: trigger_group1
+    3300000: A_Marker
+    3300002: A_Pointer
+    3300004: A_Vacuum
+    3300006: A_Wrench
+    3300008: body_group1
+    3300010: l_gripper_group1
+    3300012: LED_group1
+    3300014: menu_but_group1
+    3300016: r_gripper_group1
+    3300018: sys_but_group1
+    3300020: trackpad_group1
+    3300022: trigger_group1
+    4300000: menu_but_group1
+    4300002: LED_group1
+    4300004: sys_but_group1
+    4300006: trackpad_group1
+    4300008: r_gripper_group1
+    4300010: l_gripper_group1
+    4300012: trigger_group1
+    4300014: body_group1
+    4300016: A_Pointer
+    4300018: A_Marker
+    4300020: A_Vacuum
+    4300022: A_Wrench
     7400000: Default Take
     9500000: //RootNode
   materials:
