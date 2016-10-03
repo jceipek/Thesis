@@ -193,6 +193,18 @@ function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: I
   };
 }
 
+function cloneEntity (entity : IEntity) {
+  return <IEntity>{
+    type: entity.type
+  , id: entity.id
+  , pos: Vec3.clone(entity.pos)
+  , rot: Quat.clone(entity.rot)
+  , vel: Vec3.clone(entity.vel)
+  , color: new Uint8Array(entity.color)
+  , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 } // FIXME(JULIAN): This is really bad because it ignores the actual volume
+  };
+}
+
 function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IModel {
   return {
     type: type
@@ -335,12 +347,42 @@ interface IState {
   simulating: SIMULATION_TYPE;
   inputData: Map<string,IInputData>;
   entities: IEntity[];
+  storedEntities: IEntity[];
   models: IModel[];
   clock: IClock;
   oven: IOven;
   // latestEntityId: number;
   segments: ISegment[]
   entitiesToVelocitySegments: Map<IEntity, ISegment>;
+}
+
+function saveEntitiesToStoredEntities (state : IState) {
+  state.storedEntities.length = 0;
+  for (let entity of state.entities) {
+    state.storedEntities.push(cloneEntity(entity));
+  }
+}
+
+function restoreEntitiesFromStoredEntities (state : IState) {
+  const oldEntityIds = new Set();
+  for (let entity of state.entities) {
+    oldEntityIds.add(entity.id);
+  }
+  for (let entity of state.storedEntities) {
+    if (oldEntityIds.has(entity.id)) {
+      oldEntityIds.delete(entity.id);
+    }
+  }
+  for (let entity of state.entities) {
+    if (oldEntityIds.has(entity.id)) {
+      Vec3.set(entity.pos, 0,-100, 0); // XXX(JULIAN): This is the most terrible way to get rid of something (by hiding it underground instead of deleting...)
+      // One slightly better thing would be to make it invisible, but we can't do that quite yet because entities don't have visibility
+      state.storedEntities.push(entity);
+    }
+  }
+  state.entities = state.storedEntities;
+  state.storedEntities = [];
+  saveEntitiesToStoredEntities(state);
 }
 
 function getInitialState () : IState {
@@ -363,6 +405,7 @@ function getInitialState () : IState {
                 , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
+    , storedEntities: []
     , models: [clock, oven]
     , clock: makeClockFn()
     , oven: makeOvenFn()
@@ -376,6 +419,7 @@ function getInitialState () : IState {
               //  ]
     , entitiesToVelocitySegments: new Map<IEntity, ISegment>()
     };
+    saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
   }
 }
@@ -436,7 +480,7 @@ function getPosRotForButton (outPos : IVector3, outRot : IQuaternion, model : IM
 }
 
 function doProcessClockInput () {
-  const buttonTypes = [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON];
+  const buttonTypes = [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
   for (let [client, inputData] of STATE.inputData) {
@@ -472,20 +516,23 @@ function doProcessClockInput () {
   const stepFwdState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON); 
   if (stepFwdState.curr === 1 && stepFwdState.last === 0) {
       STATE.simulating = SIMULATION_TYPE.FWD_ONE;
+      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
   }
 
   const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
   if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
       STATE.simulationTime = 0;
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      // TODO(JULIAN): Save the current state
+      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      saveEntitiesToStoredEntities(STATE);
   }
 
   const resetStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON); 
-  if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
+  if (resetStateState.curr === 1 && resetStateState.last === 0) {
       STATE.simulationTime = 0;
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      // TODO(JULIAN): Restore the saved state
+      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      restoreEntitiesFromStoredEntities(STATE);
   }
 
   for (let type of buttonTypes) {
