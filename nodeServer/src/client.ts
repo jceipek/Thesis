@@ -56,8 +56,8 @@ const enum ENTITY_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -301,6 +301,7 @@ function doesControllerOverlapObject (controller, obj) {
 
 interface IClock {
   modelIndex: number;
+  buttonStates: Map<MODEL_TYPE, IButtonState>;
 }
 
 interface IOven {
@@ -308,7 +309,8 @@ interface IOven {
 }
 
 function makeClockFn () : IClock {
-  return {modelIndex: 0};
+  return { modelIndex: 0
+         , buttonStates: new Map<MODEL_TYPE, IButtonState>([[MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]]) };
 }
 
 function makeOvenFn () : IOven {
@@ -349,7 +351,7 @@ function getInitialState () : IState {
                 , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
-    , models: [oven, clock]
+    , models: [clock, oven]
     , clock: makeClockFn()
     , oven: makeOvenFn()
     // , latestEntityId: 0
@@ -413,9 +415,25 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                       , controller.rot), entity.rot);
 }
 
+function getPosRotForButton (outPos : IVector3, outRot : IQuaternion, model : IModel, buttonId : MODEL_TYPE) {
+  Quat.mul(/*out*/outRot
+          , model.rot, model.children.get(buttonId).rot);
+  Vec3.add(/*out*/outPos
+          , model.pos, Vec3.transformQuat(/*out*/_tempVec
+                                         , model.children.get(buttonId).pos, model.rot));
+}
 
-function doProcessClock () {
+function doProcessClockInput (controller) {
+  getPosRotForButton(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  const playPauseState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  playPauseState.curr = doVolumesOverlap(controller.pos, controller.interactionVolume
+                                        , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })? 1 : 0;
+  if (playPauseState.curr && playPauseState.curr != playPauseState.last) {
+    STATE.simulating = !STATE.simulating;
+  }
 
+
+  playPauseState.last = playPauseState.curr; 
 }
 
 function doProcessControllerInput () {
@@ -424,11 +442,11 @@ function doProcessControllerInput () {
       let controllers = inputData.controllers;
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
-        if (controller.action0.curr) {
-          STATE.simulating = true;
-        } else if (!controller.action0.curr && controller.action0.last) {
-          STATE.simulating = false;
-        }
+        // if (controller.action0.curr) {
+        //   STATE.simulating = true;
+        // } else if (!controller.action0.curr && controller.action0.last) {
+        //   STATE.simulating = false;
+        // }
         if (controller.grab.curr && !controller.grab.last) {
           let closestEntity = getClosestEntityToPoint(controller.pos);
           if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
@@ -489,7 +507,6 @@ function doProcessControllerInput () {
 
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
-const _tempVec_2 = Vec3.create();
 
 NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
@@ -515,7 +532,7 @@ NETWORK.bind(undefined, undefined, () => {
 
 
     // TRANSFER STATE
-    sendSimulationTimeFn(STATE.globalTime).then(() => {
+    sendSimulationTimeFn(STATE.simulationTime).then(() => {
       Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
         Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
         // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
