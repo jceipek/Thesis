@@ -49,8 +49,14 @@ const enum VOLUME_TYPE {
 }
 
 const enum ENTITY_TYPE {
-  DEFAULT = 0,
-  CLONER = 1
+  DEFAULT = 0
+, CLONER = 1
+}
+
+const enum SIMULATION_TYPE {
+  PAUSED = 0
+, FWD_ONE = 1
+, FWD_CONT = 2
 }
 
 const PORT = 8053;
@@ -71,8 +77,11 @@ const _sendBuffer = Buffer.allocUnsafe(1024);
 const FPS = 90;
 // const FPS = 30;
 let _latestEntityId = 0;
-const STATE : IState = getInitialState();
 
+const CLOCK_BUTTON_BASE_ROT = Quat.fromValues(-0.7071068, 0, 0, 0.7071068);
+const CLOCK_BUTTON_FLIPPED_ROT = Quat.fromValues(0.7071068, 0, 0, 0.7071068);
+
+const STATE : IState = getInitialState();
 
 function sendBroadcastFn (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
@@ -213,13 +222,13 @@ function makeOvenModelFn (pos : IVector3, rot: IQuaternion) : IModel {
 
 function makeClockModelFn (pos : IVector3, rot: IQuaternion) : IModel {
   const clock = makeModelFn(pos, rot, MODEL_TYPE.CLOCK);
-  const freezeStateButton = makeModelFn(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
+  const freezeStateButton = makeModelFn(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
-  const playPauseButton = makeModelFn(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  const playPauseButton = makeModelFn(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
-  const resetStateButton = makeModelFn(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
+  const resetStateButton = makeModelFn(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
-  const singleStepButton = makeModelFn(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
+  const singleStepButton = makeModelFn(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
   return clock;
 }
@@ -310,7 +319,10 @@ interface IOven {
 
 function makeClockFn () : IClock {
   return { modelIndex: 0
-         , buttonStates: new Map<MODEL_TYPE, IButtonState>([[MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]]) };
+         , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]]) };
 }
 
 function makeOvenFn () : IOven {
@@ -320,7 +332,7 @@ function makeOvenFn () : IOven {
 interface IState {
   globalTime: number;
   simulationTime: number;
-  simulating: boolean;
+  simulating: SIMULATION_TYPE;
   inputData: Map<string,IInputData>;
   entities: IEntity[];
   models: IModel[];
@@ -344,7 +356,7 @@ function getInitialState () : IState {
     const DEFAULT_STATE : IState = {
       globalTime: 0
     , simulationTime: 0
-    , simulating: false
+    , simulating: SIMULATION_TYPE.PAUSED
     , inputData: new Map<string,IInputData>()
     , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
@@ -423,17 +435,63 @@ function getPosRotForButton (outPos : IVector3, outRot : IQuaternion, model : IM
                                          , model.children.get(buttonId).pos, model.rot));
 }
 
-function doProcessClockInput (controller) {
-  getPosRotForButton(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
-  const playPauseState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
-  playPauseState.curr = doVolumesOverlap(controller.pos, controller.interactionVolume
-                                        , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })? 1 : 0;
-  if (playPauseState.curr && playPauseState.curr != playPauseState.last) {
-    STATE.simulating = !STATE.simulating;
+function doProcessClockInput () {
+  const buttonTypes = [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON];
+  let doIntersect = {};
+  buttonTypes.forEach((type) => { doIntersect[type] = false; });
+  for (let [client, inputData] of STATE.inputData) {
+      let controllers = inputData.controllers;
+      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
+        let controller = controllers[controllerIndex];
+        for (let type of buttonTypes) {
+          getPosRotForButton(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], type);
+          if (doVolumesOverlap(controller.pos, controller.interactionVolume
+                              , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
+            doIntersect[type] = true;
+          }
+        }
+      }
   }
 
+  for (let type of buttonTypes) {
+    const state = STATE.clock.buttonStates.get(type);
+    state.curr = doIntersect[type]? 1 : 0;
+  }
 
-  playPauseState.last = playPauseState.curr; 
+  const playPauseState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON); 
+  if (playPauseState.curr === 1 && playPauseState.last === 0) {
+    if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
+      STATE.simulating = SIMULATION_TYPE.FWD_CONT;
+      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
+    } else {
+      STATE.simulating = SIMULATION_TYPE.PAUSED;
+      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+    }
+  }
+
+  const stepFwdState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON); 
+  if (stepFwdState.curr === 1 && stepFwdState.last === 0) {
+      STATE.simulating = SIMULATION_TYPE.FWD_ONE;
+  }
+
+  const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
+  if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
+      STATE.simulationTime = 0;
+      STATE.simulating = SIMULATION_TYPE.PAUSED;
+      // TODO(JULIAN): Save the current state
+  }
+
+  const resetStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON); 
+  if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
+      STATE.simulationTime = 0;
+      STATE.simulating = SIMULATION_TYPE.PAUSED;
+      // TODO(JULIAN): Restore the saved state
+  }
+
+  for (let type of buttonTypes) {
+    const state = STATE.clock.buttonStates.get(type);
+    state.last = state.curr; 
+  } 
 }
 
 function doProcessControllerInput () {
@@ -442,6 +500,7 @@ function doProcessControllerInput () {
       let controllers = inputData.controllers;
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
+
         // if (controller.action0.curr) {
         //   STATE.simulating = true;
         // } else if (!controller.action0.curr && controller.action0.last) {
@@ -519,15 +578,19 @@ NETWORK.bind(undefined, undefined, () => {
 
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
+    doProcessClockInput();
     doProcessControllerInput();
 
-    if (STATE.simulating) {
+    if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
       const entities = STATE.entities;
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
         Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
       }
       STATE.simulationTime += 1/FPS;
+    }
+    if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
+      STATE.simulating = SIMULATION_TYPE.PAUSED;
     }
 
 
