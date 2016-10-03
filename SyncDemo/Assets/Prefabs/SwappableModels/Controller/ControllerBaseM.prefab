@@ -21,7 +21,7 @@ GameObject:
   - 4: {fileID: 4000014240327042}
   - 95: {fileID: 95000011481750982}
   m_Layer: 0
-  m_Name: ControllerM
+  m_Name: ControllerBaseM
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

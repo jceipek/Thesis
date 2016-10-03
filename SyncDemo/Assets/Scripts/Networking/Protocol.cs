@@ -6,15 +6,30 @@ public enum MessageType {
   Position = 0X00,
   PositionRotation = 0X01,
   PositionRotationScaleModel = 0X02,
-  PositionRotationVelocityColor = 0X03,
-  Segment = 0X04
+  PositionRotationScaleVisibleModel = 0X03,
+  PositionRotationVelocityColor = 0X04,
+  Segment = 0X05
 }
 
 public enum ModelType {
   None = 0X00,
   Headset = 0X01,
-  BasicController = 0X02,
-  Cube = 0X03
+  ControllerBase = 0X02,
+  ControllerAttachment_Marker = 0X03,
+  ControllerAttachment_Pointer = 0X04,
+  ControllerAttachment_Vacuum = 0X05,
+  ControllerAttachment_Wrench = 0X06,
+  Oven = 0X07,
+  Oven_CancelButton = 0X08,
+  Oven_ProjectionSpace = 0X09,
+  Oven_SingleStepBackButton = 0X0A,
+  Oven_SingleStepForwardButton = 0X0B,
+  Clock = 0X0C,
+  Clock_FreezeStateButton = 0X0D,
+  Clock_PlayPauseButton = 0X0E,
+  Clock_ResetStateButton = 0X0F,
+  Clock_SingleStepButton = 0X10,
+  Cube = 0X11
 }
 
 public struct NetMessage {
@@ -25,6 +40,7 @@ public struct NetMessage {
 	public Quaternion Rotation;
 	public ModelType ModelType;
 	public Vector3 Scale;
+	public bool Visible;
 	public Vector3 Velocity;
 	public Color32 Color;
 	public Vector3 Destination;
@@ -36,6 +52,12 @@ public struct NetMessage {
 
   	static ModelType ModelTypeFromBuff (byte[] data, ref int offset) {
   		ModelType res = (ModelType)UInt16FromBuff(data, ref offset);
+  		return res;
+  	}
+
+  	static bool BoolFromBuff (byte[] data, ref int offset) {
+  		bool res = data[offset] == 0x01;
+  		offset += 1;
   		return res;
   	}
 
@@ -109,6 +131,17 @@ public struct NetMessage {
 		                        Scale = Vector3FromBuff(data, ref offset) };
 	}
 
+	private static NetMessage DecodePositionRotationScaleVisibleModel (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.PositionRotationScaleVisibleModel,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        ObjectId = UInt16FromBuff(data, ref offset),
+		                        ModelType = ModelTypeFromBuff(data, ref offset),
+		                        Position = Vector3FromBuff(data, ref offset),
+		                        Rotation = QuaternionFromBuff(data, ref offset),
+		                        Scale = Vector3FromBuff(data, ref offset),
+		                        Visible = BoolFromBuff(data, ref offset) };
+	}
+
 	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotationVelocityColor,
 		                        SequenceNumber = Int32FromBuff(data, ref offset),
@@ -148,6 +181,12 @@ public struct NetMessage {
   				case MessageType.PositionRotationScaleModel:
   					if (messageLength == 49) {
   						decodedMessage = DecodePositionRotationScaleModel(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.PositionRotationScaleVisibleModel:
+  					if (messageLength == 50) {
+  						decodedMessage = DecodePositionRotationScaleVisibleModel(buffer, ref offset);
   						return true;
   					}
   					break;

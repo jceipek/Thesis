@@ -31,6 +31,7 @@ const TYPE_INFO = {
 , 'Vector3': {js: 'IVector3', cs: 'Vector3', len: 4*3}
 , 'Quaternion': {js: 'IQuaternion', cs: 'Quaternion', len: 4*4}
 , 'Color': {js: 'IColor', cs: 'Color32', len: 4}
+, 'Bool': {js: 'boolean', cs: 'bool', len: 1}
 }
 
 const MESSAGE_TYPE_IDENT = {cs: 'MessageType', js: 'messageType'}
@@ -43,11 +44,26 @@ const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
 const COLOR_IDENT = {cs: 'Color', js: 'color'}
 const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
 const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
+const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
 
 const MODEL_TYPES = [
   {cs: 'None', js: 'NONE'}
 , {cs: 'Headset', js: 'HEADSET'}
-, {cs: 'BasicController', js: 'BASIC_CONTROLLER'}
+, {cs: 'ControllerBase', js: 'CONTROLLER_BASE'}
+, {cs: 'ControllerAttachment_Marker', js: 'CONTROLLER_ATTACHMENT_MARKER'}
+, {cs: 'ControllerAttachment_Pointer', js: 'CONTROLLER_ATTACHMENT_POINTER'}
+, {cs: 'ControllerAttachment_Vacuum', js: 'CONTROLLER_ATTACHMENT_VACUUM'}
+, {cs: 'ControllerAttachment_Wrench', js: 'CONTROLLER_ATTACHMENT_WRENCH'}
+, {cs: 'Oven', js: 'OVEN'}
+, {cs: 'Oven_CancelButton', js: 'OVEN_CANCEL_BUTTON'}
+, {cs: 'Oven_ProjectionSpace', js: 'OVEN_PROJECTION_SPACE'}
+, {cs: 'Oven_SingleStepBackButton', js: 'OVEN_SINGLE_STEP_BACK_BUTTON'}
+, {cs: 'Oven_SingleStepForwardButton', js: 'OVEN_SINGLE_STEP_FORWARD_BUTTON'}
+, {cs: 'Clock', js: 'CLOCK'}
+, {cs: 'Clock_FreezeStateButton', js: 'CLOCK_FREEZE_STATE_BUTTON'}
+, {cs: 'Clock_PlayPauseButton', js: 'CLOCK_PLAY_PAUSE_BUTTON'}
+, {cs: 'Clock_ResetStateButton', js: 'CLOCK_RESET_STATE_BUTTON'}
+, {cs: 'Clock_SingleStepButton', js: 'CLOCK_SINGLE_STEP_BUTTON'}
 , {cs: 'Cube', js: 'CUBE'}
 ]
 
@@ -75,6 +91,17 @@ const MESSAGES : IMessage[] = [
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
             , {ident: SCALE_IDENT, customType: 'Vector3'}
+            ]
+  }
+, { name: 'PositionRotationScaleVisibleModel'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: OBJECTID_IDENT, customType: 'UInt16'}
+            , {ident: MODEL_TYPE_IDENT, customType: 'ModelType'}
+            , {ident: POSITION_IDENT, customType: 'Vector3'}
+            , {ident: ROTATION_IDENT, customType: 'Quaternion'}
+            , {ident: SCALE_IDENT, customType: 'Vector3'}
+            , {ident: VISIBLE_IDENT, customType: 'Bool'}
             ]
   }
 , { name: 'PositionRotationVelocityColor'
@@ -123,6 +150,9 @@ function jsWriteForType (type: string, identifier: string) {
       output += `  offset = buf.writeUInt8(${identifier}[1], offset, true);\n` // y
       output += `  offset = buf.writeUInt8(${identifier}[2], offset, true);\n` // z
       output += `  offset = buf.writeUInt8(${identifier}[3], offset, true);\n` // z
+      break;
+    case 'Bool':
+      output += `  offset = buf.writeInt8(${identifier}? 1 : 0, offset, true);\n`
       break;
     default:
       output += `  offset = buf.write${type}LE(${identifier}, offset, true);\n`
@@ -209,6 +239,12 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
 
   \tstatic ModelType ModelTypeFromBuff (byte[] data, ref int offset) {
   \t\tModelType res = (ModelType)UInt16FromBuff(data, ref offset);
+  \t\treturn res;
+  \t}
+
+  \tstatic bool BoolFromBuff (byte[] data, ref int offset) {
+  \t\tbool res = data[offset] == 0x01;
+  \t\toffset += 1;
   \t\treturn res;
   \t}
 

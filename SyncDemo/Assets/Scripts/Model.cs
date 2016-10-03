@@ -34,7 +34,7 @@ public class Model : MonoBehaviour {
 		return _prefabsForModels[(int)modelType];
 	}
 
-	public void UpdateData (ModelType modelType, Vector3 position, Quaternion rotation, Vector3 scale) {
+	public void UpdateData (ModelType modelType, Vector3 position, Quaternion rotation, Vector3 scale, bool visible = true) {
 		if (_modelType != modelType) {
 			if (_model != null) {
 				_model.SetActive(false);
@@ -49,10 +49,14 @@ public class Model : MonoBehaviour {
 				_model.SetActive(true);
 			}
 		}
-		transform.position = position;
-		transform.rotation = rotation;
-		transform.rotation = rotation;
-		transform.localScale = scale;
+		if (visible) {
+			transform.position = position;
+			transform.rotation = rotation;
+			transform.rotation = rotation;
+			transform.localScale = scale;
+		} else {
+			gameObject.SetActive(visible);
+		}
 	}
 }
 

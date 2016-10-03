@@ -48,6 +48,9 @@ public class IOLayer : MonoBehaviour {
             case MessageType.PositionRotationScaleModel:
                 ProcessPositionRotationScaleModelMessage(message);
                 break;
+            case MessageType.PositionRotationScaleVisibleModel:
+                ProcessPositionRotationScaleVisibleModelMessage(message);
+                break;
         }
     }
 
@@ -102,6 +105,16 @@ public class IOLayer : MonoBehaviour {
                 _models[message.ObjectId] = (Instantiate(_modelPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<Model>();
             }
             _models[message.ObjectId].UpdateData(message.ModelType, message.Position, message.Rotation, message.Scale);
+        }
+    }
+
+    void ProcessPositionRotationScaleVisibleModelMessage (NetMessage message) {
+        if (message.ObjectId < _lineSegments.Length) {
+            // Debug.Log("ID: "+message.ObjectId);
+            if (_models[message.ObjectId] == null) {
+                _models[message.ObjectId] = (Instantiate(_modelPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<Model>();
+            }
+            _models[message.ObjectId].UpdateData(message.ModelType, message.Position, message.Rotation, message.Scale, message.Visible);
         }
     }
 

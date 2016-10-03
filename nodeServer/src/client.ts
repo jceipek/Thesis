@@ -24,6 +24,9 @@ interface IModel {
   pos: IVector3;
   rot: IQuaternion;
   scale: IVector3;
+  visible: boolean;
+
+  children: IModel[];
 }
 
 interface ISegment {
@@ -59,6 +62,9 @@ const HOST = '192.168.1.255'; // Subnet broadcast
 const NETWORK = DGRAM.createSocket('udp4');
 
 const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
+const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
+const NULL_QUAT = Quat.create();
+
 
 let _interval : null|NodeJS.Timer = null;
 const _sendBuffer = Buffer.allocUnsafe(1024);
@@ -97,9 +103,9 @@ function sendAvatarInfo (destination: string, inputData : IInputData, callback :
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
   sendTargetFn(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.BASIC_CONTROLLER, controller0.pos, controller0.rot, UNIT_VECTOR3);
+    const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3);
     sendTargetFn(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.BASIC_CONTROLLER, controller1.pos, controller1.rot, UNIT_VECTOR3);
+      const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3);
       sendTargetFn(_sendBuffer, messageLength, host, port, callback);
     });
   });
@@ -111,6 +117,31 @@ function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : (
   sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
+function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, model: IModel, callback : () => (err: any, bytes: number) => void) {
+  const pos = Vec3.transformQuat(_tempVec, Vec3.add(_tempVec, model.pos, offsetpos), offsetrot);
+  const rot = Quat.mul(_tempQuat, model.rot, offsetrot);
+  const scale = Vec3.mul(_tempVec_2, model.scale, offsetscale);
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleModelMsg(_sendBuffer
+                                                                                   , 0, MESSAGE_TYPE.PositionRotationScaleVisibleModel
+                                                                                   , _currSeqId
+                                                                                   , model.id
+                                                                                   , model.type
+                                                                                   , pos
+                                                                                   , rot
+                                                                                   , scale
+                                                                                   , model.visible);
+  _currSeqId++;
+  sendBroadcastFn(_sendBuffer, messageLength, () => {
+    Promise.each(model.children, (child) => { return sendModelDataFn(pos, rot, scale, child); }).then(() => {
+      callback();
+    })
+  });
+}
+
+function sendModelPositionRotationScaleVisibility (model : IModel, callback : () => (err: any, bytes: number) => void) {
+  sendModelData(NULL_VECTOR3, NULL_QUAT, UNIT_VECTOR3, model, callback);
+}
+
 function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
@@ -120,6 +151,8 @@ function sendSegment (segment : ISegment, callback : () => (err: any, bytes: num
 const sendEntityPositionFn = Promise.promisify(sendEntityPosition);
 const sendEntityPositionRotationFn = Promise.promisify(sendEntityPositionRotation);
 const sendEntityPositionRotationVelocityColorFn = Promise.promisify(sendEntityPositionRotationVelocityColor);
+const sendModelPositionRotationScaleVisibilityFn = Promise.promisify(sendModelPositionRotationScaleVisibility);
+const sendModelDataFn = Promise.promisify(sendModelData);
 const sendSegmentFn = Promise.promisify(sendSegment);
 const sendAvatarInfoFn = Promise.promisify(sendAvatarInfo);
 
@@ -132,6 +165,18 @@ function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: I
   , vel: vel
   , color: color
   , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
+  };
+}
+
+function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IModel {
+  return {
+    type: type
+  , id: _latestEntityId++
+  , pos: pos
+  , rot: rot
+  , scale: UNIT_VECTOR3
+  , visible: true
+  , children: []
   };
 }
 
@@ -226,6 +271,21 @@ function getInitialState () : IState {
   if (statefile !== undefined) {
     return deserializeStateObject(JSON.parse(FS.readFileSync(statefile, 'utf8')));
   } else {
+
+
+    // Make Oven!
+    const oven = makeModelFn(Vec3.fromValues(0.008,0,-1.466), Quat.create(), MODEL_TYPE.OVEN);
+    const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.create(), MODEL_TYPE.OVEN_PROJECTION_SPACE);
+    oven.children.push(ovenProjection);
+    const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+    oven.children.push(ovenCancelButton);
+    const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+    oven.children.push(ovenStepBackButton);
+    const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+    oven.children.push(ovenStepForwardButton);
+
+
+
     const DEFAULT_STATE : IState = {
       time: 0
     , simulating: false
@@ -235,7 +295,7 @@ function getInitialState () : IState {
                 , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
-    , models: []
+    , models: [oven]
     // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
@@ -369,6 +429,7 @@ function doProcessControllerInput () {
 
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
+const _tempVec_2 = Vec3.create();
 
 NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
@@ -393,29 +454,30 @@ NETWORK.bind(undefined, undefined, () => {
 
 
     // TRANSFER STATE 
-    Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
+    Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
+      Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
       // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-
-      let stuffToSend = [];
-      for (let remoteClient of STATE.inputData.keys()) {
-        for (let [client, inputData] of STATE.inputData) {
-          if (remoteClient !== client) {
-            stuffToSend.push({destination: remoteClient, data: inputData})
+        let avatarStuffToSend = [];
+        for (let remoteClient of STATE.inputData.keys()) {
+          for (let [client, inputData] of STATE.inputData) {
+            if (remoteClient !== client) {
+              avatarStuffToSend.push({destination: remoteClient, data: inputData})
+            }
           }
         }
-      }
 
 
-      Promise.each(stuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
-        let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+        Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
+          let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+        });
+
+
+        // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+        //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+        // });
+
+        // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
       });
-
-
-      // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-      //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-      // });
-
-      // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
     });
 
     STATE.time += 1/FPS;
