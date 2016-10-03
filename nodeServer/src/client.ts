@@ -26,7 +26,7 @@ interface IModel {
   scale: IVector3;
   visible: boolean;
 
-  children: IModel[];
+  children: Map<MODEL_TYPE, IModel>;
 }
 
 interface ISegment {
@@ -56,8 +56,8 @@ const enum ENTITY_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -136,7 +136,12 @@ function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsca
                                                                                    , model.visible);
   _currSeqId++;
   sendBroadcastFn(_sendBuffer, messageLength, () => {
-    Promise.each(model.children, (child) => { return sendModelDataFn(pos, rot, scale, child); }).then(() => {
+    // XXX(JULIAN): Super Hacky:
+    const children = [];
+    for (let child of model.children.values()) {
+      children.push(child);
+    }
+    Promise.each(children, (child) => { return sendModelDataFn(pos, rot, scale, child); }).then(() => {
       callback();
     })
   });
@@ -152,6 +157,12 @@ function sendSegment (segment : ISegment, callback : () => (err: any, bytes: num
   sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
+function sendSimulationTime (time : number, callback : () => (err: any, bytes: number) => void) {
+  const messageLength = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, 0, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
+  _currSeqId++;
+  sendBroadcastFn(_sendBuffer, messageLength, callback);
+}
+
 const sendEntityPositionFn = Promise.promisify(sendEntityPosition);
 const sendEntityPositionRotationFn = Promise.promisify(sendEntityPositionRotation);
 const sendEntityPositionRotationVelocityColorFn = Promise.promisify(sendEntityPositionRotationVelocityColor);
@@ -159,6 +170,7 @@ const sendModelPositionRotationScaleVisibilityFn = Promise.promisify(sendModelPo
 const sendModelDataFn = Promise.promisify(sendModelData);
 const sendSegmentFn = Promise.promisify(sendSegment);
 const sendAvatarInfoFn = Promise.promisify(sendAvatarInfo);
+const sendSimulationTimeFn = Promise.promisify(sendSimulationTime);
 
 function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: IColor, type : ENTITY_TYPE) : IEntity {
   return <IEntity>{
@@ -180,34 +192,35 @@ function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IMo
   , rot: rot
   , scale: UNIT_VECTOR3
   , visible: true
-  , children: []
+  , children: new Map<MODEL_TYPE, IModel>()
   };
 }
 
 
-function makeOvenFn (pos : IVector3, rot: IQuaternion) : IModel {
+function makeOvenModelFn (pos : IVector3, rot: IQuaternion) : IModel {
   const oven = makeModelFn(pos, rot, MODEL_TYPE.OVEN);
   const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
-  oven.children.push(ovenProjection);
+  ovenProjection.visible = false;
+  oven.children.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjection);
   const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
-  oven.children.push(ovenCancelButton);
+  oven.children.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButton);
   const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
-  oven.children.push(ovenStepBackButton);
+  oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButton);
   const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
-  oven.children.push(ovenStepForwardButton);
+  oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButton);
   return oven;
 }
 
-function makeClockFn (pos : IVector3, rot: IQuaternion) : IModel {
+function makeClockModelFn (pos : IVector3, rot: IQuaternion) : IModel {
   const clock = makeModelFn(pos, rot, MODEL_TYPE.CLOCK);
   const freezeStateButton = makeModelFn(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
-  clock.children.push(freezeStateButton);
+  clock.children.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
   const playPauseButton = makeModelFn(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
-  clock.children.push(playPauseButton);
+  clock.children.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
   const resetStateButton = makeModelFn(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
-  clock.children.push(resetStateButton);
+  clock.children.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
   const singleStepButton = makeModelFn(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
-  clock.children.push(singleStepButton);
+  clock.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
   return clock;
 }
 
@@ -286,12 +299,31 @@ function doesControllerOverlapObject (controller, obj) {
 }
 
 
+interface IClock {
+  modelIndex: number;
+}
+
+interface IOven {
+  modelIndex: number;
+}
+
+function makeClockFn () : IClock {
+  return {modelIndex: 0};
+}
+
+function makeOvenFn () : IOven {
+  return { modelIndex: 1 };
+}
+
 interface IState {
-  time: number;
+  globalTime: number;
+  simulationTime: number;
   simulating: boolean;
   inputData: Map<string,IInputData>;
   entities: IEntity[];
   models: IModel[];
+  clock: IClock;
+  oven: IOven;
   // latestEntityId: number;
   segments: ISegment[]
   entitiesToVelocitySegments: Map<IEntity, ISegment>;
@@ -304,14 +336,12 @@ function getInitialState () : IState {
   } else {
 
     // Initial Objects
-    const oven = makeOvenFn(Vec3.fromValues(0.008,0,-1.466), Quat.create());
-    const clock = makeClockFn(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
-    // const clock = makeClockFn(Vec3.fromValues(0,0,0), Quat.fromValues(0,0.7071068,0,0.7071068));
-    // const clock2 = makeClockFn(Vec3.fromValues(0,0,0), Quat.fromValues(0,0.7071068,0,0.7071068));
-
+    const oven = makeOvenModelFn(Vec3.fromValues(0.008,0,-1.466), Quat.create());
+    const clock = makeClockModelFn(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
 
     const DEFAULT_STATE : IState = {
-      time: 0
+      globalTime: 0
+    , simulationTime: 0
     , simulating: false
     , inputData: new Map<string,IInputData>()
     , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
@@ -320,6 +350,8 @@ function getInitialState () : IState {
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
     , models: [oven, clock]
+    , clock: makeClockFn()
+    , oven: makeOvenFn()
     // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
@@ -381,6 +413,10 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                       , controller.rot), entity.rot);
 }
 
+
+function doProcessClock () {
+
+}
 
 function doProcessControllerInput () {
   let objectPoints = new Map<IEntity, Array<IController>>();
@@ -474,37 +510,40 @@ NETWORK.bind(undefined, undefined, () => {
         let entity = entities[entityIndex];
         Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
       }
+      STATE.simulationTime += 1/FPS;
     }
 
 
-    // TRANSFER STATE 
-    Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
-      Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
-      // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-        let avatarStuffToSend = [];
-        for (let remoteClient of STATE.inputData.keys()) {
-          for (let [client, inputData] of STATE.inputData) {
-            if (remoteClient !== client) {
-              avatarStuffToSend.push({destination: remoteClient, data: inputData})
+    // TRANSFER STATE
+    sendSimulationTimeFn(STATE.globalTime).then(() => {
+      Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
+        Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
+        // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+          let avatarStuffToSend = [];
+          for (let remoteClient of STATE.inputData.keys()) {
+            for (let [client, inputData] of STATE.inputData) {
+              if (remoteClient !== client) {
+                avatarStuffToSend.push({destination: remoteClient, data: inputData})
+              }
             }
           }
-        }
 
 
-        Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
-          let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+          Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
+            let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+          });
+
+
+          // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+          //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+          // });
+
+          // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
         });
-
-
-        // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-        //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-        // });
-
-        // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
       });
     });
 
-    STATE.time += 1/FPS;
+    STATE.globalTime += 1/FPS;
   }, 1000/FPS);
 });
 

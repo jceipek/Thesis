@@ -11,7 +11,8 @@ export const enum MESSAGE_TYPE {
   PositionRotationScaleModel = 0X02,
   PositionRotationScaleVisibleModel = 0X03,
   PositionRotationVelocityColor = 0X04,
-  Segment = 0X05
+  Segment = 0X05,
+  SimulationTime = 0X06
 }
 
 export const enum MODEL_TYPE {
@@ -131,6 +132,13 @@ export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, message
   offset = buf.writeUInt8(color[1], offset, true);
   offset = buf.writeUInt8(color[2], offset, true);
   offset = buf.writeUInt8(color[3], offset, true);
+  return offset;
+}
+
+export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, time : number) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  offset = buf.writeFloatLE(time, offset, true);
   return offset;
 }
 

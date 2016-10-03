@@ -45,6 +45,7 @@ const COLOR_IDENT = {cs: 'Color', js: 'color'}
 const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
 const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
 const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
+const TIME_IDENT = {cs: 'Time', js: 'time'}
 
 const MODEL_TYPES = [
   {cs: 'None', js: 'NONE'}
@@ -121,6 +122,12 @@ const MESSAGES : IMessage[] = [
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: DESTINATION_IDENT, customType: 'Vector3'}
             , {ident: COLOR_IDENT, customType: 'Color'}
+            ]
+  }
+, { name: 'SimulationTime'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: TIME_IDENT, customType: 'Float'}
             ]
   }
 ];

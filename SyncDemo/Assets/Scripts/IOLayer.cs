@@ -51,7 +51,15 @@ public class IOLayer : MonoBehaviour {
             case MessageType.PositionRotationScaleVisibleModel:
                 ProcessPositionRotationScaleVisibleModelMessage(message);
                 break;
+            case MessageType.SimulationTime:
+                ProcessSimulationTimeMessage(message);
+                break;
         }
+    }
+
+    public static float _simulationTime; 
+    void ProcessSimulationTimeMessage (NetMessage message) {
+        _simulationTime = message.Time;
     }
 
     void ProcessPositionMessage (NetMessage message) {

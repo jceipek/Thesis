@@ -8,7 +8,8 @@ public enum MessageType {
   PositionRotationScaleModel = 0X02,
   PositionRotationScaleVisibleModel = 0X03,
   PositionRotationVelocityColor = 0X04,
-  Segment = 0X05
+  Segment = 0X05,
+  SimulationTime = 0X06
 }
 
 public enum ModelType {
@@ -44,6 +45,7 @@ public struct NetMessage {
 	public Vector3 Velocity;
 	public Color32 Color;
 	public Vector3 Destination;
+	public float Time;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
@@ -161,6 +163,12 @@ public struct NetMessage {
 		                        Color = ColorFromBuff(data, ref offset) };
 	}
 
+	private static NetMessage DecodeSimulationTime (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.SimulationTime,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        Time = FloatFromBuff(data, ref offset) };
+	}
+
 	public static bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
 		if (messageLength > 0) {
 			int offset = 0;
@@ -199,6 +207,12 @@ public struct NetMessage {
   				case MessageType.Segment:
   					if (messageLength == 35) {
   						decodedMessage = DecodeSegment(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.SimulationTime:
+  					if (messageLength == 9) {
+  						decodedMessage = DecodeSimulationTime(buffer, ref offset);
   						return true;
   					}
   					break;
