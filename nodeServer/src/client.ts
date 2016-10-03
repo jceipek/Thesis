@@ -117,10 +117,14 @@ function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : (
   sendBroadcastFn(_sendBuffer, messageLength, callback);
 }
 
-function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, model: IModel, callback : () => (err: any, bytes: number) => void) {
-  const pos = Vec3.transformQuat(Vec3.create(), Vec3.add(_tempVec, model.pos, offsetpos), offsetrot);
-  const rot = Quat.mul(Quat.create(), model.rot, offsetrot);
-  const scale = Vec3.mul(Vec3.create(), model.scale, offsetscale);
+function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, model: IModel, callback : () => (err: any, bytes: number) => void) {  
+  const rot = Quat.mul(/*out*/Quat.create()
+                      , offsetrot, model.rot);
+  const pos = Vec3.add(/*out*/Vec3.create()
+                      , offsetpos, Vec3.transformQuat(/*out*/_tempVec
+                                                     , model.pos, offsetrot));
+  const scale = Vec3.mul(/*out*/Vec3.create()
+                        , model.scale, offsetscale);
   const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleModelMsg(_sendBuffer
                                                                                    , 0, MESSAGE_TYPE.PositionRotationScaleVisibleModel
                                                                                    , _currSeqId
@@ -178,6 +182,33 @@ function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IMo
   , visible: true
   , children: []
   };
+}
+
+
+function makeOvenFn (pos : IVector3, rot: IQuaternion) : IModel {
+  const oven = makeModelFn(pos, rot, MODEL_TYPE.OVEN);
+  const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
+  oven.children.push(ovenProjection);
+  const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+  oven.children.push(ovenCancelButton);
+  const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+  oven.children.push(ovenStepBackButton);
+  const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+  oven.children.push(ovenStepForwardButton);
+  return oven;
+}
+
+function makeClockFn (pos : IVector3, rot: IQuaternion) : IModel {
+  const clock = makeModelFn(pos, rot, MODEL_TYPE.CLOCK);
+  const freezeStateButton = makeModelFn(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
+  clock.children.push(freezeStateButton);
+  const playPauseButton = makeModelFn(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  clock.children.push(playPauseButton);
+  const resetStateButton = makeModelFn(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
+  clock.children.push(resetStateButton);
+  const singleStepButton = makeModelFn(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
+  clock.children.push(singleStepButton);
+  return clock;
 }
 
 function makeSegmentFn (start : IVector3, end : IVector3, color: IColor) : ISegment {
@@ -272,18 +303,11 @@ function getInitialState () : IState {
     return deserializeStateObject(JSON.parse(FS.readFileSync(statefile, 'utf8')));
   } else {
 
-
-    // Make Oven!
-    const oven = makeModelFn(Vec3.fromValues(0.008,0,-1.466), Quat.create(), MODEL_TYPE.OVEN);
-    const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
-    oven.children.push(ovenProjection);
-    const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
-    oven.children.push(ovenCancelButton);
-    const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
-    oven.children.push(ovenStepBackButton);
-    const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
-    oven.children.push(ovenStepForwardButton);
-
+    // Initial Objects
+    const oven = makeOvenFn(Vec3.fromValues(0.008,0,-1.466), Quat.create());
+    const clock = makeClockFn(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
+    // const clock = makeClockFn(Vec3.fromValues(0,0,0), Quat.fromValues(0,0.7071068,0,0.7071068));
+    // const clock2 = makeClockFn(Vec3.fromValues(0,0,0), Quat.fromValues(0,0.7071068,0,0.7071068));
 
 
     const DEFAULT_STATE : IState = {
@@ -295,7 +319,7 @@ function getInitialState () : IState {
                 , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
                 , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
               //  ]
-    , models: [oven]
+    , models: [oven, clock]
     // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
@@ -311,8 +335,8 @@ function getInitialState () : IState {
 }
 
 
-// let DEBUG_START_POS = Vec3.fromValues(0, 0.5, 0);
-// let DEBUG_END_POS = Vec3.fromValues(0, 1, 0);
+// let DEBUG_START_POS = Vec3.fromValues(0, 0, 0);
+// let DEBUG_END_POS = Vec3.fromValues(1, 1.5, 2);
 // // let DEBUG_END_POS = Vec3.fromValues(1, 0.2, 0);
 
 // STATE.controllerData.set('DEBUG', [makeControllerFn()]);
@@ -321,7 +345,7 @@ function getInitialState () : IState {
 // STATE.controllerData.get('DEBUG')[0].grab.curr = 0;
 
 // let DEBUG_START_ROT = Quat.setAxisAngle(Quat.create(), Vec3.fromValues(0,0,1), 0);
-// let DEBUG_ROT = Quat.setAxisAngle(Quat.create(), Vec3.fromValues(0,0,1), Math.PI/2);
+// let DEBUG_ROT = Quat.setAxisAngle(Quat.create(), Vec3.fromValues(0,1,0), Math.PI/2);
 
 // Quat.copy(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT);
 
@@ -641,14 +665,17 @@ function deserializeStateObject (stateObject) : IState {
 process.on('SIGINT', () => {
   clearInterval(_interval);
 
-  FS.writeFile(`persistentState${(new Date()).getTime()}.json`, serializeState({_latestEntityId: _latestEntityId, STATE: STATE}), function(err) {
-    if(err) {
-        return console.log(err);
-    }
+  // FS.writeFile(`persistentState${(new Date()).getTime()}.json`, serializeState({_latestEntityId: _latestEntityId, STATE: STATE}), function(err) {
+  //   if(err) {
+  //       return console.log(err);
+  //   }
 
-    console.log("Saved State to JSON");
-    setTimeout(() => {
-      process.exit();
-    }, 1000);
-  });
+  //   console.log("Saved State to JSON");
+  //   setTimeout(() => {
+  //     process.exit();
+  //   }, 1000);
+  // });
+
+  process.exit();
+  console.log("NOT SAVING TO JSON!");
 });
