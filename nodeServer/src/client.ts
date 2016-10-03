@@ -118,9 +118,9 @@ function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : (
 }
 
 function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, model: IModel, callback : () => (err: any, bytes: number) => void) {
-  const pos = Vec3.transformQuat(_tempVec, Vec3.add(_tempVec, model.pos, offsetpos), offsetrot);
-  const rot = Quat.mul(_tempQuat, model.rot, offsetrot);
-  const scale = Vec3.mul(_tempVec_2, model.scale, offsetscale);
+  const pos = Vec3.transformQuat(Vec3.create(), Vec3.add(_tempVec, model.pos, offsetpos), offsetrot);
+  const rot = Quat.mul(Quat.create(), model.rot, offsetrot);
+  const scale = Vec3.mul(Vec3.create(), model.scale, offsetscale);
   const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleModelMsg(_sendBuffer
                                                                                    , 0, MESSAGE_TYPE.PositionRotationScaleVisibleModel
                                                                                    , _currSeqId
@@ -275,13 +275,13 @@ function getInitialState () : IState {
 
     // Make Oven!
     const oven = makeModelFn(Vec3.fromValues(0.008,0,-1.466), Quat.create(), MODEL_TYPE.OVEN);
-    const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.create(), MODEL_TYPE.OVEN_PROJECTION_SPACE);
+    const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
     oven.children.push(ovenProjection);
-    const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+    const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
     oven.children.push(ovenCancelButton);
-    const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+    const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
     oven.children.push(ovenStepBackButton);
-    const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.2435592, -4.174977e-18, -5.503402e-17, 0.9698861), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+    const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
     oven.children.push(ovenStepForwardButton);
 
 
