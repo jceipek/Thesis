@@ -6,13 +6,12 @@ Material:
   m_ObjectHideFlags: 0
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
-  m_Name: ProjectionSpace
+  m_Name: Implement_Lens
   m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
-  m_ShaderKeywords: _ALPHAPREMULTIPLY_ON _EMISSION
-  m_LightmapFlags: 1
-  m_CustomRenderQueue: 3000
-  stringTagMap:
-    RenderType: Transparent
+  m_ShaderKeywords: 
+  m_LightmapFlags: 5
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
   m_SavedProperties:
     serializedVersion: 2
     m_TexEnvs:
@@ -82,7 +81,7 @@ Material:
       second: 1
     - first:
         name: _DstBlend
-      second: 10
+      second: 0
     - first:
         name: _GlossMapScale
       second: 1
@@ -97,19 +96,13 @@ Material:
       second: 0
     - first:
         name: _Mode
-      second: 3
+      second: 0
     - first:
         name: _OcclusionStrength
       second: 1
     - first:
         name: _Parallax
       second: 0.02
-    - first:
-        name: _Phi0
-      second: 0
-    - first:
-        name: _Phi1
-      second: 1
     - first:
         name: _SmoothnessTextureChannel
       second: 0
@@ -120,42 +113,15 @@ Material:
         name: _SrcBlend
       second: 1
     - first:
-        name: _Theta0
-      second: 0
-    - first:
-        name: _Theta1
-      second: 1
-    - first:
-        name: _UScale
-      second: 1
-    - first:
         name: _UVSec
       second: 0
     - first:
-        name: _VScale
-      second: 1
-    - first:
         name: _ZWrite
-      second: 0
+      second: 1
     m_Colors:
     - first:
         name: _Color
-      second: {r: 0.0008, g: 0.8479, b: 1, a: 0.34759998}
+      second: {r: 0, g: 0.7659, b: 0.8, a: 1}
     - first:
         name: _EmissionColor
       second: {r: 0, g: 0, b: 0, a: 1}
-    - first:
-        name: _N
-      second: {r: 0, g: 0, b: 0, a: 0}
-    - first:
-        name: _UAxis
-      second: {r: 0, g: 0, b: 0, a: 0}
-    - first:
-        name: _UOrigin
-      second: {r: 0, g: 0, b: 0, a: 0}
-    - first:
-        name: _VAxis
-      second: {r: 0, g: 0, b: 0, a: 0}
-    - first:
-        name: _VOrigin
-      second: {r: 0, g: 0, b: 0, a: 0}
