@@ -575,7 +575,7 @@ function doProcessOvenInput () {
   for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
     let entity = entities[entityIndex];
     if (doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
-                          , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
+                        , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
         objectsInOven.push(entity);
     }
   }
