@@ -327,6 +327,7 @@ interface IClock {
 
 interface IOven {
   modelIndex: number;
+  buttonStates: Map<MODEL_TYPE, IButtonState>;
 }
 
 function makeClockFn () : IClock {
@@ -338,7 +339,11 @@ function makeClockFn () : IClock {
 }
 
 function makeOvenFn () : IOven {
-  return { modelIndex: 1 };
+  return { modelIndex: 1
+         , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, {curr: 0, last: 0}]
+                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]]) };
 }
 
 interface IState {
@@ -471,12 +476,12 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                       , controller.rot), entity.rot);
 }
 
-function getPosRotForButton (outPos : IVector3, outRot : IQuaternion, model : IModel, buttonId : MODEL_TYPE) {
+function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, model : IModel, modelId : MODEL_TYPE) {
   Quat.mul(/*out*/outRot
-          , model.rot, model.children.get(buttonId).rot);
+          , model.rot, model.children.get(modelId).rot);
   Vec3.add(/*out*/outPos
           , model.pos, Vec3.transformQuat(/*out*/_tempVec
-                                         , model.children.get(buttonId).pos, model.rot));
+                                         , model.children.get(modelId).pos, model.rot));
 }
 
 function doProcessClockInput () {
@@ -488,7 +493,7 @@ function doProcessClockInput () {
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
         for (let type of buttonTypes) {
-          getPosRotForButton(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], type);
+          getPosRotForSubObj(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], type);
           if (doVolumesOverlap(controller.pos, controller.interactionVolume
                               , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
             doIntersect[type] = true;
@@ -539,6 +544,73 @@ function doProcessClockInput () {
     const state = STATE.clock.buttonStates.get(type);
     state.last = state.curr; 
   } 
+}
+
+function doProcessOvenInput () {
+  const buttonTypes = [ MODEL_TYPE.OVEN_CANCEL_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON ];
+  let doIntersect = {};
+  buttonTypes.forEach((type) => { doIntersect[type] = false; });
+  for (let [client, inputData] of STATE.inputData) {
+      let controllers = inputData.controllers;
+      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
+        let controller = controllers[controllerIndex];
+        for (let type of buttonTypes) {
+          getPosRotForSubObj(_tempVec, _tempQuat, STATE.models[STATE.oven.modelIndex], type);
+          if (doVolumesOverlap(controller.pos, controller.interactionVolume
+                              , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
+            doIntersect[type] = true;
+          }
+        }
+      }
+  }
+
+
+  const objectsInOven = [];
+  const ovenModel = STATE.models[STATE.oven.modelIndex];
+  Vec3.add(/*out*/_tempVec
+          , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
+                                             , Vec3.fromValues(0, 0.364, 0.039), ovenModel.rot));
+
+  const entities = STATE.entities;
+  for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
+    let entity = entities[entityIndex];
+    if (doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
+                          , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
+        objectsInOven.push(entity);
+    }
+  }
+  STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
+
+  for (let type of buttonTypes) {
+    const state = STATE.oven.buttonStates.get(type);
+    state.curr = doIntersect[type]? 1 : 0;
+  }
+
+  const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
+  if (cancelState.curr === 1 && cancelState.last === 0) {
+    // if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
+    //   STATE.simulating = SIMULATION_TYPE.FWD_CONT;
+    //   Quat.copy(/*out*/STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_FLIPPED_ROT);
+    // } else {
+    //   STATE.simulating = SIMULATION_TYPE.PAUSED;
+    //   Quat.copy(/*out*/STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_BASE_ROT);
+    // }
+  }
+
+  const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
+  if (stepBackState.curr === 1 && stepBackState.last === 0) {
+
+  }
+
+  const stepForwardState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON); 
+  if (stepForwardState.curr === 1 && stepForwardState.last === 0) {
+
+  }
+
+  for (let type of buttonTypes) {
+    const state = STATE.oven.buttonStates.get(type);
+    state.last = state.curr; 
+  }
 }
 
 function doProcessControllerInput () {
@@ -626,6 +698,7 @@ NETWORK.bind(undefined, undefined, () => {
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
     doProcessClockInput();
+    doProcessOvenInput();
     doProcessControllerInput();
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {

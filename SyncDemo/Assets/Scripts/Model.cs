@@ -54,9 +54,8 @@ public class Model : MonoBehaviour {
 			transform.rotation = rotation;
 			transform.rotation = rotation;
 			transform.localScale = scale;
-		} else {
-			gameObject.SetActive(visible);
 		}
+		gameObject.SetActive(visible);
 	}
 }
 
