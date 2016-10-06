@@ -25,6 +25,7 @@ Please be aware that everything in this repo currently represents prototype-qual
 
 ### Folder structure
 `nodeServer` contains a node.js server written in [Typescript](https://www.typescriptlang.org/)
+
 `SyncDemo` contains a [Unity](https://store.unity.com/) Project written in C#.
 
 ### Running the server:
@@ -35,6 +36,7 @@ Run `cd nodeServer; npm install`.
 Then modify `const HOST = '192.168.1.255';`
 on [line 65 of `nodeServer/src/client.ts`](https://github.com/jceipek/Thesis/blob/jc-kitchen/nodeServer/src/client.ts#L65)
 to match your subnet (or change it to localhost: `const HOST = '127.0.0.1';`).
+
 After installing Typescript, run `tsc --watch` to compile the changes and generate `nodeServer/js/client.js`
 Now you can run `cd nodeServer/js/; node client.js` to launch the server (Yes, it is called 'client' instead of 'server', sorry). 
 
