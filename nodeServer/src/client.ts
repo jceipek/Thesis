@@ -16,6 +16,8 @@ interface IEntity {
   rot: IQuaternion;
   vel: IVector3;
   color: IColor;
+
+  interactionVolume: IInteractionVolume
 }
 
 interface IModel {
@@ -46,6 +48,7 @@ interface ISphereInteractionVolume extends IInteractionVolume {
 
 const enum VOLUME_TYPE {
   SPHERE
+, NONE
 }
 
 const enum ENTITY_TYPE {
@@ -182,26 +185,26 @@ const sendAvatarInfoFn = Promise.promisify(sendAvatarInfo);
 const sendSimulationTimeFn = Promise.promisify(sendSimulationTime);
 
 function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: IColor, type : ENTITY_TYPE) : IEntity {
-  return <IEntity>{
+  return {
     type: type
   , id: _latestEntityId++
   , pos: pos
   , rot: rot
   , vel: vel
   , color: color
-  , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
+  , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 }
 
 function cloneEntity (entity : IEntity) {
-  return <IEntity>{
+  return {
     type: entity.type
   , id: entity.id
   , pos: Vec3.clone(entity.pos)
   , rot: Quat.clone(entity.rot)
   , vel: Vec3.clone(entity.vel)
   , color: new Uint8Array(entity.color)
-  , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 } // FIXME(JULIAN): This is really bad because it ignores the actual volume
+  , interactionVolume: entity.interactionVolume
   };
 }
 
@@ -276,6 +279,9 @@ interface IController {
   pickedUpObjectTime: Date;
   pickedUpObjectOffset: IVector3;
   pickedUpObjectRotOffset: IVector3;
+
+  pickedUpObjectPos: IVector3;
+  pickedUpObjectRot: IVector3;
 }
 
 interface IInputData {
@@ -293,6 +299,8 @@ function makeControllerFn () : IController {
          , pickedUpObjectTime: null
          , pickedUpObjectOffset: Vec3.create()
          , pickedUpObjectRotOffset: Quat.create()
+         , pickedUpObjectPos: Vec3.create()
+         , pickedUpObjectRot: Quat.create()
          , id: _latestEntityId++ };
 }
 
@@ -325,9 +333,123 @@ interface IClock {
   buttonStates: Map<MODEL_TYPE, IButtonState>;
 }
 
+
+const enum CONDITION_TYPE {
+  PRESENT, INTERSECT
+}
+
+interface ICondition {
+  type: CONDITION_TYPE;
+}
+
+interface IPresentCondition extends ICondition {
+  objtype: ENTITY_TYPE;
+}
+
+interface IIntersectCondition extends ICondition {
+  objtypea: ENTITY_TYPE;
+  objtypeb: ENTITY_TYPE;
+}
+
+function makePresentCondition (objtype : ENTITY_TYPE) : IPresentCondition {
+  return { type: CONDITION_TYPE.PRESENT, objtype: objtype };
+}
+
+function makeIntersectCondition (objtypea : ENTITY_TYPE, objtypeb : ENTITY_TYPE) : IIntersectCondition {
+  return { type: CONDITION_TYPE.INTERSECT, objtypea: objtypea, objtypeb: objtypeb };
+}
+
+function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
+  if (condA.type === condB.type) {
+    switch (condA.type) {
+      case CONDITION_TYPE.PRESENT:
+        return (<IPresentCondition>condA).objtype === (<IPresentCondition>condB).objtype;
+      case CONDITION_TYPE.INTERSECT:
+        return (<IIntersectCondition>condA).objtypea === (<IIntersectCondition>condB).objtypea &&
+               (<IIntersectCondition>condA).objtypeb === (<IIntersectCondition>condB).objtypeb; 
+    }
+  }
+  return false;
+}
+
+const enum ACTION_TYPE {
+  MOVE_BY, DELETE
+}
+
+interface IAction {
+  type: ACTION_TYPE;
+}
+
+interface IMoveByAction extends IAction {
+  posOffset: IVector3;
+  rotOffset: IQuaternion;
+}
+
+function makeMoveByAction (posOffset : IVector3, rotOffset : IQuaternion) : IAction {
+  return <IMoveByAction>{ type: ACTION_TYPE.MOVE_BY, posOffset: posOffset, rotOffset: rotOffset };
+}
+
+interface IRule {
+  conditions: ICondition[];
+  actions: IAction[];
+  entities: IEntity[];
+}
+
 interface IOven {
   modelIndex: number;
   buttonStates: Map<MODEL_TYPE, IButtonState>;
+  rules: IRule[];
+}
+
+function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
+  let entities = [];
+  let offset = 0;
+  for (let cond of conditions) {
+    switch (cond.type) {
+      case CONDITION_TYPE.PRESENT:
+        entities.push(makeEntityFn( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.models[STATE.oven.modelIndex].pos)
+                                  , Quat.create()
+                                  , Vec3.create()
+                                  , new Uint8Array([0xFF,0x00,0x00,0xEE])
+                                  , (<IPresentCondition>cond).objtype));
+    }
+  }
+  return {
+    conditions: conditions
+  , actions: []
+  , entities: entities
+  };
+}
+
+function conditionExistsInConditions (condition: ICondition, conditions: ICondition[]) : boolean {
+  for (let testcond of conditions) {
+    if (conditionsEqual(testcond, condition)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function conditionsMatch (conditionsA: ICondition[], conditionsB: ICondition[]) : boolean {
+  if (conditionsA.length !== conditionsB.length) {
+    return false;
+  }
+  for (let testcond of conditionsA) {
+    if (!conditionExistsInConditions(testcond, conditionsB)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getIndexOfConditionsInRules (conditions: ICondition[], rules: IRule[]) : number {
+  for (let i = rules.length - 1; i >= 0; i--) {
+    const currRule = rules[i];
+    if (conditionsMatch(conditions, currRule.conditions)) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function makeClockFn () : IClock {
@@ -343,7 +465,9 @@ function makeOvenFn () : IOven {
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]]) };
+                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
+         , rules: []
+         };
 }
 
 interface IState {
@@ -358,7 +482,6 @@ interface IState {
   oven: IOven;
   // latestEntityId: number;
   segments: ISegment[]
-  entitiesToVelocitySegments: Map<IEntity, ISegment>;
 }
 
 function saveEntitiesToStoredEntities (state : IState) {
@@ -422,7 +545,6 @@ function getInitialState () : IState {
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
               //  ]
-    , entitiesToVelocitySegments: new Map<IEntity, ISegment>()
     };
     saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
@@ -447,8 +569,7 @@ function getInitialState () : IState {
 
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
-function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
-  const entities = STATE.entities;
+function getClosestEntityToPoint (entities: IEntity[], pt : IVector3) : IEntity|null {
   let closest = null;
   let sqrDistance = Infinity;
   for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
@@ -465,6 +586,10 @@ function getClosestEntityToPoint (pt : IVector3) : IEntity|null {
 function pickUpEntityWithController (entity: IEntity, controller: IController) {
   controller.pickedUpObject = entity;
   controller.pickedUpObjectTime = new Date();
+
+  Vec3.copy(/*out*/controller.pickedUpObjectPos, entity.pos);
+  Quat.copy(/*out*/controller.pickedUpObjectRot, entity.rot);
+
   Vec3.transformQuat(/*out*/controller.pickedUpObjectOffset
                     , Vec3.sub(/*out*/controller.pickedUpObjectOffset
                               , entity.pos, controller.pos)
@@ -565,7 +690,7 @@ function doProcessOvenInput () {
   }
 
 
-  const objectsInOven = [];
+  const objectsInOven : IEntity[] = []; // TODO(JULIAN): Replace with IModel[]
   const ovenModel = STATE.models[STATE.oven.modelIndex];
   Vec3.add(/*out*/_tempVec
           , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
@@ -580,6 +705,30 @@ function doProcessOvenInput () {
     }
   }
   STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
+  let conditions : ICondition[] = [];
+  if (objectsInOven.length > 0) {
+    for (var obj of objectsInOven) {
+      conditions.push(makePresentCondition(obj.type));
+      for (var obj2 of objectsInOven) {
+        if (doVolumesOverlap(obj.pos, obj.interactionVolume, obj2.pos, obj2.interactionVolume)) {
+          conditions.push(makeIntersectCondition(obj.type, obj2.type));
+        }
+      } 
+    }
+
+    let ruleIndex = getIndexOfConditionsInRules(conditions, STATE.oven.rules);
+    if (ruleIndex < 0) {
+      // rule for this condition doesn't exist yet, so we need to make it
+      ruleIndex = STATE.oven.rules.push(makeEmptyRuleForConditions(STATE, conditions)) - 1;
+    }
+
+    const newActions = doProcessControllerInput(STATE.oven.rules[ruleIndex].entities, true);
+    STATE.oven.rules[ruleIndex].actions.push(...newActions);
+
+  } else {
+    // We're not working on any rules
+
+  }
 
   for (let type of buttonTypes) {
     const state = STATE.oven.buttonStates.get(type);
@@ -613,20 +762,24 @@ function doProcessOvenInput () {
   }
 }
 
-function doProcessControllerInput () {
+function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
+  for (let e of entities) {
+    if (e === entity) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function doProcessControllerInput (entities : IEntity[], doDebug : boolean) : IAction[] {
+  const actionList : IAction[] = [];
   let objectPoints = new Map<IEntity, Array<IController>>();
   for (let [client, inputData] of STATE.inputData) {
       let controllers = inputData.controllers;
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
-
-        // if (controller.action0.curr) {
-        //   STATE.simulating = true;
-        // } else if (!controller.action0.curr && controller.action0.last) {
-        //   STATE.simulating = false;
-        // }
         if (controller.grab.curr && !controller.grab.last) {
-          let closestEntity = getClosestEntityToPoint(controller.pos);
+          let closestEntity = getClosestEntityToPoint(entities, controller.pos);
           if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
             if (closestEntity.type == ENTITY_TYPE.CLONER) {
               // let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array(closestEntity.color), ENTITY_TYPE.DEFAULT);
@@ -641,7 +794,28 @@ function doProcessControllerInput () {
         }
 
         if (!controller.grab.curr) {
-          controller.pickedUpObject = null;
+          if (controller.pickedUpObject != null) {
+            if (doDebug && entityIsInList(controller.pickedUpObject, entities)) {
+            Quat.mul(/*out*/_tempQuat
+                    , Quat.mul(/*out*/_tempQuat
+                              , controller.rot
+                              , controller.pickedUpObjectRotOffset)
+                    , Quat.invert(/*out*/Quat.create()
+                                 , controller.pickedUpObjectRot));
+            const newAction = makeMoveByAction(Vec3.sub(/*out*/Vec3.create()
+                                                     , Vec3.add(/*out*/_tempVec
+                                                               , controller.pos
+                                                               , Vec3.transformQuat(/*out*/_tempVec
+                                                                                   , controller.pickedUpObjectOffset
+                                                                                   , controller.rot))
+                                                     , controller.pickedUpObjectPos)
+                                              , Quat.clone(_tempQuat));
+
+              actionList.push(newAction);
+            }
+            
+            controller.pickedUpObject = null;
+          }
         } else if (controller.pickedUpObject != null) {
           // objectPoints
 
@@ -650,8 +824,7 @@ function doProcessControllerInput () {
           }
           objectPoints.get(controller.pickedUpObject).push(controller);
         }
-        controller.grab.last = controller.grab.curr; // So that we can grab things
-        controller.action0.last = controller.action0.curr;
+
       }
   }
 
@@ -669,19 +842,31 @@ function doProcessControllerInput () {
       let controller = controllerList[1];
       Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
       Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
-
-      // if (!STATE.entitiesToVelocitySegments.has(entity)) {
-      //   let segment = makeSegmentFn(entity.pos, Vec3.clone(controller.pos), new Uint8Array([0x00,0x00,0xFF,0xFF]));
-      //   STATE.segments.push(segment);
-      //   STATE.entitiesToVelocitySegments.set(entity, segment);
-      //   console.log("Make Seg");
-      // }
-      // Vec3.copy(/*out*/STATE.entitiesToVelocitySegments.get(entity).end, controller.pos);
     }
   }
 
+  if (actionList.length > 0) {
+    console.log(`NEW ACTIONS: ${doDebug? 'oven' : 'NOT_OVEN!!!!!!!!!!!!!!!!!!!!!!!'}`);
+    for (let action of actionList) {
+      console.log(`TYPE: ${action.type}, POS: ${(<IMoveByAction>action).posOffset}, ROT: ${(<IMoveByAction>action).rotOffset}`);
+    }
+  }
 
+  return actionList;
 }
+
+function performActionOnEntity (action : IAction, entity : IEntity) {
+  switch (action.type) {
+    case ACTION_TYPE.MOVE_BY:
+      Vec3.add(entity.pos, entity.pos, (<IMoveByAction>action).posOffset);
+      // Vec3.add(entity.rot, entity.rot, (<IMoveByAction>action).rotOffset);
+      break;
+    case ACTION_TYPE.DELETE:
+      console.error("TODO(JULIAN): Implement 'Delete' action");
+      break;
+  }
+}
+
 
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
@@ -699,13 +884,40 @@ NETWORK.bind(undefined, undefined, () => {
 
     doProcessClockInput();
     doProcessOvenInput();
-    doProcessControllerInput();
+    doProcessControllerInput(STATE.entities, false);
+
+    for (let [client, inputData] of STATE.inputData) {
+      let controllers = inputData.controllers;
+      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
+        let controller = controllers[controllerIndex];
+        controller.grab.last = controller.grab.curr; // So that we can grab things
+        controller.action0.last = controller.action0.curr;
+      }
+    }
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
       const entities = STATE.entities;
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
         Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
+
+        // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply
+        for (let rule of STATE.oven.rules) {
+          let ruleApplies = true;
+          for (let cond of rule.conditions) {
+            if (cond.type === CONDITION_TYPE.PRESENT && (<IPresentCondition>cond).objtype !== entity.type) {
+              ruleApplies = false;
+            }
+          }
+          if (ruleApplies) {
+            console.log(`ACTION COUNT: ${rule.actions.length}`)
+            for (let action of rule.actions) {
+              performActionOnEntity(action, entity);
+              console.log(`DOING: posOffset ${(<IMoveByAction>action).posOffset}`);
+            }
+          }
+        }
+
       }
       STATE.simulationTime += 1/FPS;
     }
@@ -718,6 +930,9 @@ NETWORK.bind(undefined, undefined, () => {
     sendSimulationTimeFn(STATE.simulationTime).then(() => {
       Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
         Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
+
+          // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
+          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities : [], (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
         // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
           let avatarStuffToSend = [];
           for (let remoteClient of STATE.inputData.keys()) {
@@ -739,6 +954,8 @@ NETWORK.bind(undefined, undefined, () => {
           // });
 
           // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+
+          });
         });
       });
     });
