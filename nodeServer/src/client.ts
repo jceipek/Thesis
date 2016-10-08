@@ -227,6 +227,14 @@ function makeClockModel (pos : IVector3, rot: IQuaternion) : IEntity {
   return clock;
 }
 
+function makeShelfModel (pos : IVector3, rot: IQuaternion) : IEntity {
+  const shelf = makeModel(pos, rot, MODEL_TYPE.SHELF);
+
+  // const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
+  // shelf.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
+  return shelf;
+}
+
 function makeSegment (start : IVector3, end : IVector3, color: IColor) : ISegment {
   return {
     id: _latestEntityId++
@@ -500,6 +508,7 @@ function getInitialState () : IState {
     // Initial Objects
     const oven = makeOvenModel(Vec3.fromValues(0.008,0,-1.466), Quat.create());
     const clock = makeClockModel(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
+    const shelf = makeClockModel(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
     const DEFAULT_STATE : IState = {
       globalTime: 0
@@ -512,7 +521,7 @@ function getInitialState () : IState {
                 ]
               //  ]
     , storedEntities: []
-    , models: [clock, oven]
+    , models: [clock, oven, shelf]
     , clock: makeClockFn()
     , oven: makeOvenFn()
     // , latestEntityId: 0
