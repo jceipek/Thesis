@@ -388,7 +388,7 @@ function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : 
       case CONDITION_TYPE.PRESENT:
         entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.models[STATE.oven.modelIndex].pos)
                                   , Quat.create()
-                                  , Vec3.create()
+                                  , Vec3.clone(UNIT_VECTOR3)
                                   , new Uint8Array([0xFF,0x00,0x00,0xEE])
                                   , (<IPresentCondition>cond).objtype));
     }
@@ -506,9 +506,9 @@ function getInitialState () : IState {
     , simulationTime: 0
     , simulating: SIMULATION_TYPE.PAUSED
     , inputData: new Map<string,IInputData>()
-    , entities: [ makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE)
-                , makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER)
-                , makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE)
+    , entities: [ makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE)
+                , makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER)
+                , makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE)
                 ]
               //  ]
     , storedEntities: []
@@ -526,7 +526,7 @@ function getInitialState () : IState {
     };
 
     // for (let i = 0; i < 500; i++) {
-    //   DEFAULT_STATE.entities.push(makeEntityFn(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
+    //   DEFAULT_STATE.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
     // }
 
     saveEntitiesToStoredEntities(DEFAULT_STATE);
