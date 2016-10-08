@@ -1,4 +1,4 @@
-import {MESSAGE_TYPE, MODEL_TYPE} from './protocol'
+import { MESSAGE_TYPE, MODEL_TYPE } from './protocol'
 import * as Protocol from './protocol'
 import * as FS from 'fs'
 import * as Promise from 'bluebird'
@@ -10,25 +10,16 @@ type IQuaternion = GLM.IArray;
 type IColor = Uint8Array;
 
 interface IEntity {
-  type: ENTITY_TYPE;
-  id: number;
-  pos: IVector3;
-  rot: IQuaternion;
-  vel: IVector3;
-  color: IColor;
-
-  interactionVolume: IInteractionVolume
-}
-
-interface IModel {
   type: MODEL_TYPE;
   id: number;
   pos: IVector3;
   rot: IQuaternion;
   scale: IVector3;
   visible: boolean;
+  tint: IColor;
 
-  children: Map<MODEL_TYPE, IModel>;
+  interactionVolume: IInteractionVolume;
+  children: Map<MODEL_TYPE, IEntity>;
 }
 
 interface ISegment {
@@ -49,11 +40,6 @@ interface ISphereInteractionVolume extends IInteractionVolume {
 const enum VOLUME_TYPE {
   SPHERE
 , NONE
-}
-
-const enum ENTITY_TYPE {
-  DEFAULT = 0
-, CLONER = 1
 }
 
 const enum SIMULATION_TYPE {
@@ -86,26 +72,15 @@ const CLOCK_BUTTON_FLIPPED_ROT = Quat.fromValues(0.7071068, 0, 0, 0.7071068);
 
 const STATE : IState = getInitialState();
 
-function sendBroadcastFn (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
+function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
-function sendTargetFn (message : Buffer, messageLength: number, host: string, port: number, callback : (err: any, bytes: number) => void) {
+function sendTarget (message : Buffer, messageLength: number, host: string, port: number, callback : (err: any, bytes: number) => void) {
   NETWORK.send(message, 0, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
 let _currSeqId = 0;
-function sendEntityPosition (obj : IEntity, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionMsg(_sendBuffer, 0, MESSAGE_TYPE.Position, _currSeqId, obj.id, obj.pos);
-  _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, callback);
-}
-
-function sendEntityPositionRotation (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotation, _currSeqId, entity.id, entity.pos, entity.rot);
-  _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, callback);
-}
 
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3);
@@ -114,101 +89,103 @@ function sendAvatarInfo (destination: string, inputData : IInputData, callback :
   let port = parseInt(portString, 10);
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
-  sendTargetFn(_sendBuffer, messageLength, host, port, () => {
+  sendTarget(_sendBuffer, messageLength, host, port, () => {
     const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3);
-    sendTargetFn(_sendBuffer, messageLength, host, port, () => {
+    sendTarget(_sendBuffer, messageLength, host, port, () => {
       const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3);
-      sendTargetFn(_sendBuffer, messageLength, host, port, callback);
+      sendTarget(_sendBuffer, messageLength, host, port, callback);
     });
   });
 }
 
-function sendEntityPositionRotationVelocityColor (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationVelocityColorMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationVelocityColor, _currSeqId, entity.id, entity.pos, entity.rot, entity.vel, entity.color);
-  _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, callback);
-}
-
-function sendModelData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, model: IModel, callback : () => (err: any, bytes: number) => void) {  
+function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity, callback : () => (err: any, bytes: number) => void) {  
   const rot = Quat.mul(/*out*/Quat.create()
-                      , offsetrot, model.rot);
+                      , offsetrot, entity.rot);
   const pos = Vec3.add(/*out*/Vec3.create()
                       , offsetpos, Vec3.transformQuat(/*out*/_tempVec
-                                                     , model.pos, offsetrot));
+                                                     , entity.pos, offsetrot));
   const scale = Vec3.mul(/*out*/Vec3.create()
-                        , model.scale, offsetscale);
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleModelMsg(_sendBuffer
-                                                                                   , 0, MESSAGE_TYPE.PositionRotationScaleVisibleModel
+                        , entity.scale, offsetscale);
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
+                                                                                   , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
                                                                                    , _currSeqId
-                                                                                   , model.id
-                                                                                   , model.type
+                                                                                   , entity.id
+                                                                                   , entity.type
                                                                                    , pos
                                                                                    , rot
                                                                                    , scale
-                                                                                   , model.visible);
+                                                                                   , entity.visible
+                                                                                   , entity.tint);
   _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, () => {
+  sendBroadcast(_sendBuffer, messageLength, () => {
     // XXX(JULIAN): Super Hacky:
     const children = [];
-    for (let child of model.children.values()) {
+    for (let child of entity.children.values()) {
       children.push(child);
     }
-    Promise.each(children, (child) => { return sendModelDataFn(pos, rot, scale, child); }).then(() => {
+    Promise.each(children, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
       callback();
     })
   });
 }
 
-function sendModelPositionRotationScaleVisibility (model : IModel, callback : () => (err: any, bytes: number) => void) {
-  sendModelData(NULL_VECTOR3, NULL_QUAT, UNIT_VECTOR3, model, callback);
+function sendModel (model : IEntity, callback : () => (err: any, bytes: number) => void) {
+  sendEntityData(NULL_VECTOR3, NULL_QUAT, UNIT_VECTOR3, model, callback);
 }
 
 function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, callback);
+  sendBroadcast(_sendBuffer, messageLength, callback);
 }
 
 function sendSimulationTime (time : number, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, 0, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
   _currSeqId++;
-  sendBroadcastFn(_sendBuffer, messageLength, callback);
+  sendBroadcast(_sendBuffer, messageLength, callback);
 }
 
-const sendEntityPositionFn = Promise.promisify(sendEntityPosition);
-const sendEntityPositionRotationFn = Promise.promisify(sendEntityPositionRotation);
-const sendEntityPositionRotationVelocityColorFn = Promise.promisify(sendEntityPositionRotationVelocityColor);
-const sendModelPositionRotationScaleVisibilityFn = Promise.promisify(sendModelPositionRotationScaleVisibility);
-const sendModelDataFn = Promise.promisify(sendModelData);
-const sendSegmentFn = Promise.promisify(sendSegment);
-const sendAvatarInfoFn = Promise.promisify(sendAvatarInfo);
-const sendSimulationTimeFn = Promise.promisify(sendSimulationTime);
 
-function makeEntityFn (pos : IVector3, rot: IQuaternion, vel: IVector3, color: IColor, type : ENTITY_TYPE) : IEntity {
+const sendModelPromise = Promise.promisify(sendModel);
+const sendModelDataPromise = Promise.promisify(sendEntityData);
+const sendSegmentPromise = Promise.promisify(sendSegment);
+const sendAvatarInfoPromise = Promise.promisify(sendAvatarInfo);
+const sendSimulationTimePromise = Promise.promisify(sendSimulationTime);
+
+function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
     type: type
   , id: _latestEntityId++
   , pos: pos
   , rot: rot
-  , vel: vel
-  , color: color
+  , scale: scale
+  , tint: tint
+  , visible: true
+  , children: new Map<MODEL_TYPE, IEntity>()
   , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 }
 
-function cloneEntity (entity : IEntity) {
+function cloneEntity (entity : IEntity) : IEntity {
+  const children = new Map<MODEL_TYPE, IEntity>();
+  for (let [type, child] of entity.children) {
+    children.set(type, cloneEntity(child));
+  }
+
   return {
     type: entity.type
-  , id: entity.id
+  , id: _latestEntityId++
   , pos: Vec3.clone(entity.pos)
   , rot: Quat.clone(entity.rot)
-  , vel: Vec3.clone(entity.vel)
-  , color: new Uint8Array(entity.color)
+  , scale: Vec3.clone(entity.scale)
+  , visible: entity.visible
+  , children: children
+  , tint: new Uint8Array(entity.tint)
   , interactionVolume: entity.interactionVolume
   };
 }
 
-function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IModel {
+function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEntity {
   return {
     type: type
   , id: _latestEntityId++
@@ -216,39 +193,41 @@ function makeModelFn (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IMo
   , rot: rot
   , scale: UNIT_VECTOR3
   , visible: true
-  , children: new Map<MODEL_TYPE, IModel>()
+  , tint: new Uint8Array([0xFF,0xFF,0xFF,0xFF])
+  , interactionVolume: null
+  , children: new Map<MODEL_TYPE, IEntity>()
   };
 }
 
 
-function makeOvenModelFn (pos : IVector3, rot: IQuaternion) : IModel {
-  const oven = makeModelFn(pos, rot, MODEL_TYPE.OVEN);
-  const ovenProjection = makeModelFn(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
+function makeOvenModel (pos : IVector3, rot: IQuaternion) : IEntity {
+  const oven = makeModel(pos, rot, MODEL_TYPE.OVEN);
+  const ovenProjection = makeModel(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
   ovenProjection.visible = false;
   oven.children.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjection);
-  const ovenCancelButton = makeModelFn(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+  const ovenCancelButton = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
   oven.children.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButton);
-  const ovenStepBackButton = makeModelFn(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+  const ovenStepBackButton = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
   oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButton);
-  const ovenStepForwardButton = makeModelFn(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+  const ovenStepForwardButton = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
   oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButton);
   return oven;
 }
 
-function makeClockModelFn (pos : IVector3, rot: IQuaternion) : IModel {
-  const clock = makeModelFn(pos, rot, MODEL_TYPE.CLOCK);
-  const freezeStateButton = makeModelFn(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
+function makeClockModel (pos : IVector3, rot: IQuaternion) : IEntity {
+  const clock = makeModel(pos, rot, MODEL_TYPE.CLOCK);
+  const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
-  const playPauseButton = makeModelFn(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  const playPauseButton = makeModel(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
-  const resetStateButton = makeModelFn(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
+  const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
-  const singleStepButton = makeModelFn(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
+  const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
   clock.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
   return clock;
 }
 
-function makeSegmentFn (start : IVector3, end : IVector3, color: IColor) : ISegment {
+function makeSegment (start : IVector3, end : IVector3, color: IColor) : ISegment {
   return {
     id: _latestEntityId++
   , start: start
@@ -289,7 +268,7 @@ interface IInputData {
   controllers: IController[];
 }
 
-function makeControllerFn () : IController {
+function makeController () : IController {
   return { pos: Vec3.create()
          , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
          , rot: Quat.create()
@@ -304,7 +283,7 @@ function makeControllerFn () : IController {
          , id: _latestEntityId++ };
 }
 
-function makeHeadsetFn () : IHeadset {
+function makeHeadset () : IHeadset {
   return { pos: Vec3.create()
          , rot: Quat.create()
          , id: _latestEntityId++ };
@@ -343,19 +322,19 @@ interface ICondition {
 }
 
 interface IPresentCondition extends ICondition {
-  objtype: ENTITY_TYPE;
+  objtype: MODEL_TYPE;
 }
 
 interface IIntersectCondition extends ICondition {
-  objtypea: ENTITY_TYPE;
-  objtypeb: ENTITY_TYPE;
+  objtypea: MODEL_TYPE;
+  objtypeb: MODEL_TYPE;
 }
 
-function makePresentCondition (objtype : ENTITY_TYPE) : IPresentCondition {
+function makePresentCondition (objtype : MODEL_TYPE) : IPresentCondition {
   return { type: CONDITION_TYPE.PRESENT, objtype: objtype };
 }
 
-function makeIntersectCondition (objtypea : ENTITY_TYPE, objtypeb : ENTITY_TYPE) : IIntersectCondition {
+function makeIntersectCondition (objtypea : MODEL_TYPE, objtypeb : MODEL_TYPE) : IIntersectCondition {
   return { type: CONDITION_TYPE.INTERSECT, objtypea: objtypea, objtypeb: objtypeb };
 }
 
@@ -407,7 +386,7 @@ function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : 
   for (let cond of conditions) {
     switch (cond.type) {
       case CONDITION_TYPE.PRESENT:
-        entities.push(makeEntityFn( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.models[STATE.oven.modelIndex].pos)
+        entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.models[STATE.oven.modelIndex].pos)
                                   , Quat.create()
                                   , Vec3.create()
                                   , new Uint8Array([0xFF,0x00,0x00,0xEE])
@@ -477,7 +456,7 @@ interface IState {
   inputData: Map<string,IInputData>;
   entities: IEntity[];
   storedEntities: IEntity[];
-  models: IModel[];
+  models: IEntity[];
   clock: IClock;
   oven: IOven;
   // latestEntityId: number;
@@ -503,8 +482,7 @@ function restoreEntitiesFromStoredEntities (state : IState) {
   }
   for (let entity of state.entities) {
     if (oldEntityIds.has(entity.id)) {
-      Vec3.set(entity.pos, 0,-100, 0); // XXX(JULIAN): This is the most terrible way to get rid of something (by hiding it underground instead of deleting...)
-      // One slightly better thing would be to make it invisible, but we can't do that quite yet because entities don't have visibility
+      entity.visible = false; // XXX(JULIAN): Would be better to actually delete the entity... 
       state.storedEntities.push(entity);
     }
   }
@@ -520,18 +498,18 @@ function getInitialState () : IState {
   } else {
 
     // Initial Objects
-    const oven = makeOvenModelFn(Vec3.fromValues(0.008,0,-1.466), Quat.create());
-    const clock = makeClockModelFn(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
+    const oven = makeOvenModel(Vec3.fromValues(0.008,0,-1.466), Quat.create());
+    const clock = makeClockModel(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
 
     const DEFAULT_STATE : IState = {
       globalTime: 0
     , simulationTime: 0
     , simulating: SIMULATION_TYPE.PAUSED
     , inputData: new Map<string,IInputData>()
-    , entities: [ makeEntityFn(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT)
-                , makeEntityFn(Vec3.fromValues(0,1.5,0), Quat.create(), Vec3.create(), new Uint8Array([0x00,0x33,0xFF,0xEE]), ENTITY_TYPE.CLONER) ]
+    , entities: [ makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE)
+                , makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER)
+                , makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE)
+                ]
               //  ]
     , storedEntities: []
     , models: [clock, oven]
@@ -546,6 +524,11 @@ function getInitialState () : IState {
               //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
               //  ]
     };
+
+    // for (let i = 0; i < 500; i++) {
+    //   DEFAULT_STATE.entities.push(makeEntityFn(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
+    // }
+
     saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
   }
@@ -601,7 +584,7 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                       , controller.rot), entity.rot);
 }
 
-function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, model : IModel, modelId : MODEL_TYPE) {
+function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, model : IEntity, modelId : MODEL_TYPE) {
   Quat.mul(/*out*/outRot
           , model.rot, model.children.get(modelId).rot);
   Vec3.add(/*out*/outPos
@@ -690,7 +673,7 @@ function doProcessOvenInput () {
   }
 
 
-  const objectsInOven : IEntity[] = []; // TODO(JULIAN): Replace with IModel[]
+  const objectsInOven : IEntity[] = [];
   const ovenModel = STATE.models[STATE.oven.modelIndex];
   Vec3.add(/*out*/_tempVec
           , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
@@ -781,15 +764,15 @@ function doProcessControllerInput (entities : IEntity[], doDebug : boolean) : IA
         if (controller.grab.curr && !controller.grab.last) {
           let closestEntity = getClosestEntityToPoint(entities, controller.pos);
           if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
-            if (closestEntity.type == ENTITY_TYPE.CLONER) {
-              // let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array(closestEntity.color), ENTITY_TYPE.DEFAULT);
-              let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT);
-              console.log(clonedObject);
-              STATE.entities.push(clonedObject);
-              pickUpEntityWithController(clonedObject, controller);
-            } else {
-              pickUpEntityWithController(closestEntity, controller);
-            }
+            // if (closestEntity.type == ENTITY_TYPE.CLONER) {
+            //   // let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array(closestEntity.color), ENTITY_TYPE.DEFAULT);
+            //   let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT);
+            //   console.log(clonedObject);
+            //   STATE.entities.push(clonedObject);
+            //   pickUpEntityWithController(clonedObject, controller);
+            // } else {
+            pickUpEntityWithController(closestEntity, controller);
+            // }
           }
         }
 
@@ -838,11 +821,11 @@ function doProcessControllerInput (entities : IEntity[], doDebug : boolean) : IA
 
       Quat.mul(/*out*/controller.pickedUpObject.rot, controller.rot, controller.pickedUpObjectRotOffset);
     }
-    if (controllerList.length > 1) {
-      let controller = controllerList[1];
-      Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
-      Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
-    }
+    // if (controllerList.length > 1) {
+    //   let controller = controllerList[1];
+    //   Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
+    //   Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
+    // }
   }
 
   if (actionList.length > 0) {
@@ -899,7 +882,7 @@ NETWORK.bind(undefined, undefined, () => {
       const entities = STATE.entities;
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         let entity = entities[entityIndex];
-        Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
+        // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
 
         // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply
         for (let rule of STATE.oven.rules) {
@@ -927,12 +910,12 @@ NETWORK.bind(undefined, undefined, () => {
 
 
     // TRANSFER STATE
-    sendSimulationTimeFn(STATE.simulationTime).then(() => {
-      Promise.each(STATE.models, (model) => { return sendModelPositionRotationScaleVisibilityFn(model); }).then(() => {
-        Promise.each(STATE.entities, (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
+    sendSimulationTimePromise(STATE.simulationTime).then(() => {
+      Promise.each(STATE.models, (model) => { return sendModelPromise(model); }).then(() => {
+        Promise.each(STATE.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
 
           // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
-          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities : [], (entity) => { return sendEntityPositionRotationVelocityColorFn(entity); }).then(() => {
+          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
         // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
           let avatarStuffToSend = [];
           for (let remoteClient of STATE.inputData.keys()) {
@@ -944,7 +927,7 @@ NETWORK.bind(undefined, undefined, () => {
           }
 
 
-          Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoFn(destAndInputData.destination, destAndInputData.data); }).then(() => {
+          Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
             let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
           });
 
@@ -974,10 +957,10 @@ NETWORK.on('message', (message : Buffer, remote) => {
   let client = remote.address + ':' + remote.port;
   let inputData = STATE.inputData;
   if (!inputData.has(client)) {
-    console.log("HI!");
-    inputData.set(client, { headset: makeHeadsetFn()
-                          , controllers: [ makeControllerFn()
-                                         , makeControllerFn() ]});
+    console.log(`${client} connected!`);
+    inputData.set(client, { headset: makeHeadset()
+                          , controllers: [ makeController()
+                                         , makeController() ]});
   }
 
   // inputData.get(client)[0].grab.last = inputData.get(client)[0].grab.curr;

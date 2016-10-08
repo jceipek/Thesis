@@ -6,7 +6,7 @@ public enum MessageType {
   Position = 0X00,
   PositionRotation = 0X01,
   PositionRotationScaleModel = 0X02,
-  PositionRotationScaleVisibleModel = 0X03,
+  PositionRotationScaleVisibleTintModel = 0X03,
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
   SimulationTime = 0X06
@@ -30,7 +30,11 @@ public enum ModelType {
   Clock_PlayPauseButton = 0X0E,
   Clock_ResetStateButton = 0X0F,
   Clock_SingleStepButton = 0X10,
-  Cube = 0X11
+  Cube = 0X11,
+  Sphere = 0X12,
+  Cylinder = 0X13,
+  Shelf = 0X14,
+  Pedestal = 0X15
 }
 
 public struct NetMessage {
@@ -42,6 +46,7 @@ public struct NetMessage {
 	public ModelType ModelType;
 	public Vector3 Scale;
 	public bool Visible;
+	public Color32 Tint;
 	public Vector3 Velocity;
 	public Color32 Color;
 	public Vector3 Destination;
@@ -133,15 +138,16 @@ public struct NetMessage {
 		                        Scale = Vector3FromBuff(data, ref offset) };
 	}
 
-	private static NetMessage DecodePositionRotationScaleVisibleModel (byte[] data, ref int offset) {
-		return new NetMessage { MessageType = MessageType.PositionRotationScaleVisibleModel,
+	private static NetMessage DecodePositionRotationScaleVisibleTintModel (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.PositionRotationScaleVisibleTintModel,
 		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        ModelType = ModelTypeFromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Rotation = QuaternionFromBuff(data, ref offset),
 		                        Scale = Vector3FromBuff(data, ref offset),
-		                        Visible = BoolFromBuff(data, ref offset) };
+		                        Visible = BoolFromBuff(data, ref offset),
+		                        Tint = ColorFromBuff(data, ref offset) };
 	}
 
 	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
@@ -192,9 +198,9 @@ public struct NetMessage {
   						return true;
   					}
   					break;
-  				case MessageType.PositionRotationScaleVisibleModel:
-  					if (messageLength == 50) {
-  						decodedMessage = DecodePositionRotationScaleVisibleModel(buffer, ref offset);
+  				case MessageType.PositionRotationScaleVisibleTintModel:
+  					if (messageLength == 54) {
+  						decodedMessage = DecodePositionRotationScaleVisibleTintModel(buffer, ref offset);
   						return true;
   					}
   					break;

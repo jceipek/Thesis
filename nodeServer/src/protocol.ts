@@ -9,7 +9,7 @@ export const enum MESSAGE_TYPE {
   Position = 0X00,
   PositionRotation = 0X01,
   PositionRotationScaleModel = 0X02,
-  PositionRotationScaleVisibleModel = 0X03,
+  PositionRotationScaleVisibleTintModel = 0X03,
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
   SimulationTime = 0X06
@@ -33,7 +33,11 @@ export const enum MODEL_TYPE {
   CLOCK_PLAY_PAUSE_BUTTON = 0X0E,
   CLOCK_RESET_STATE_BUTTON = 0X0F,
   CLOCK_SINGLE_STEP_BUTTON = 0X10,
-  CUBE = 0X11
+  CUBE = 0X11,
+  SPHERE = 0X12,
+  CYLINDER = 0X13,
+  SHELF = 0X14,
+  PEDESTAL = 0X15
 }
 
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
@@ -78,7 +82,7 @@ export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offse
   return offset;
 }
 
-export function fillBufferWithPositionRotationScaleVisibleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean) {
+export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
@@ -94,6 +98,10 @@ export function fillBufferWithPositionRotationScaleVisibleModelMsg (buf : Buffer
   offset = buf.writeFloatLE(scale[1], offset, true);
   offset = buf.writeFloatLE(scale[2], offset, true);
   offset = buf.writeInt8(visible? 1 : 0, offset, true);
+  offset = buf.writeUInt8(tint[0], offset, true);
+  offset = buf.writeUInt8(tint[1], offset, true);
+  offset = buf.writeUInt8(tint[2], offset, true);
+  offset = buf.writeUInt8(tint[3], offset, true);
   return offset;
 }
 

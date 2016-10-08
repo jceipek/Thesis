@@ -42,6 +42,7 @@ const VELOCITY_IDENT = {cs: 'Velocity', js: 'vel'}
 const DESTINATION_IDENT = {cs: 'Destination', js: 'dest'}
 const ROTATION_IDENT = {cs: 'Rotation', js: 'rot'}
 const COLOR_IDENT = {cs: 'Color', js: 'color'}
+const TINT_IDENT = {cs: 'Tint', js: 'tint'}
 const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
 const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
 const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
@@ -50,22 +51,31 @@ const TIME_IDENT = {cs: 'Time', js: 'time'}
 const MODEL_TYPES = [
   {cs: 'None', js: 'NONE'}
 , {cs: 'Headset', js: 'HEADSET'}
+// CONTROLLER
 , {cs: 'ControllerBase', js: 'CONTROLLER_BASE'}
 , {cs: 'ControllerAttachment_Marker', js: 'CONTROLLER_ATTACHMENT_MARKER'}
 , {cs: 'ControllerAttachment_Pointer', js: 'CONTROLLER_ATTACHMENT_POINTER'}
 , {cs: 'ControllerAttachment_Vacuum', js: 'CONTROLLER_ATTACHMENT_VACUUM'}
 , {cs: 'ControllerAttachment_Wrench', js: 'CONTROLLER_ATTACHMENT_WRENCH'}
+// OVEN
 , {cs: 'Oven', js: 'OVEN'}
 , {cs: 'Oven_CancelButton', js: 'OVEN_CANCEL_BUTTON'}
 , {cs: 'Oven_ProjectionSpace', js: 'OVEN_PROJECTION_SPACE'}
 , {cs: 'Oven_SingleStepBackButton', js: 'OVEN_SINGLE_STEP_BACK_BUTTON'}
 , {cs: 'Oven_SingleStepForwardButton', js: 'OVEN_SINGLE_STEP_FORWARD_BUTTON'}
+// CLOCK
 , {cs: 'Clock', js: 'CLOCK'}
 , {cs: 'Clock_FreezeStateButton', js: 'CLOCK_FREEZE_STATE_BUTTON'}
 , {cs: 'Clock_PlayPauseButton', js: 'CLOCK_PLAY_PAUSE_BUTTON'}
 , {cs: 'Clock_ResetStateButton', js: 'CLOCK_RESET_STATE_BUTTON'}
 , {cs: 'Clock_SingleStepButton', js: 'CLOCK_SINGLE_STEP_BUTTON'}
+// PRIMITIVES
 , {cs: 'Cube', js: 'CUBE'}
+, {cs: 'Sphere', js: 'SPHERE'}
+, {cs: 'Cylinder', js: 'CYLINDER'}
+// SHELF
+, {cs: 'Shelf', js: 'SHELF'}
+, {cs: 'Pedestal', js: 'PEDESTAL'}
 ]
 
 const MESSAGES : IMessage[] = [
@@ -94,7 +104,7 @@ const MESSAGES : IMessage[] = [
             , {ident: SCALE_IDENT, customType: 'Vector3'}
             ]
   }
-, { name: 'PositionRotationScaleVisibleModel'
+, { name: 'PositionRotationScaleVisibleTintModel'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
             , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
@@ -103,6 +113,7 @@ const MESSAGES : IMessage[] = [
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
             , {ident: SCALE_IDENT, customType: 'Vector3'}
             , {ident: VISIBLE_IDENT, customType: 'Bool'}
+            , {ident: TINT_IDENT, customType: 'Color'}
             ]
   }
 , { name: 'PositionRotationVelocityColor'

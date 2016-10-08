@@ -17,6 +17,9 @@ ModelImporter:
     100018: SingleStepBackButton
     100020: SingleStepForwardButton
     100022: Sphere
+    100024: Pedestal
+    100026: Shelf
+    100028: ShelfTop
     400000: CancelButton
     400002: Cube
     400004: Cube_001
@@ -29,6 +32,9 @@ ModelImporter:
     400018: SingleStepBackButton
     400020: SingleStepForwardButton
     400022: Sphere
+    400024: Pedestal
+    400026: Shelf
+    400028: ShelfTop
     2300000: CancelButton
     2300002: Cube
     2300004: Cube_001
@@ -40,6 +46,9 @@ ModelImporter:
     2300016: SingleStepBackButton
     2300018: SingleStepForwardButton
     2300020: Sphere
+    2300022: Pedestal
+    2300024: Shelf
+    2300026: ShelfTop
     3300000: CancelButton
     3300002: Cube
     3300004: Cube_001
@@ -51,6 +60,9 @@ ModelImporter:
     3300016: SingleStepBackButton
     3300018: SingleStepForwardButton
     3300020: Sphere
+    3300022: Pedestal
+    3300024: Shelf
+    3300026: ShelfTop
     4300000: Cylinder
     4300002: Sphere
     4300004: Cube_003
@@ -62,6 +74,9 @@ ModelImporter:
     4300016: ProjectionSpace
     4300018: Oven
     4300020: SingleStepForwardButton
+    4300022: Pedestal
+    4300024: ShelfTop
+    4300026: Shelf
     7400000: Default Take
     9500000: //RootNode
   materials:

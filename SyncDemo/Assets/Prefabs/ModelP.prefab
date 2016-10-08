@@ -85,4 +85,12 @@ MonoBehaviour:
   - ModelType: 16
     Prefab: {fileID: 1000012724437184, guid: 431c0d70f4a83495597e82ef7b24400d, type: 2}
   - ModelType: 17
-    Prefab: {fileID: 140796, guid: 9e8506e4d99c846859a7da34f86ddf4a, type: 2}
+    Prefab: {fileID: 1000011175952562, guid: 03c282c85e9d84768b868c476fd26c00, type: 2}
+  - ModelType: 18
+    Prefab: {fileID: 1000010134969880, guid: 4e205ba82a0be44e683226e21d1e83ff, type: 2}
+  - ModelType: 19
+    Prefab: {fileID: 1000013069632694, guid: 4bb05467f098e4cf7ab8cbf8c9980c4c, type: 2}
+  - ModelType: 20
+    Prefab: {fileID: 1000013010442488, guid: f3daf8bb1026a443c98cd5ab63f7761e, type: 2}
+  - ModelType: 21
+    Prefab: {fileID: 1000013131507830, guid: 02639f3271a234a348dbce1b07f2c01b, type: 2}
