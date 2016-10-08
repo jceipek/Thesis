@@ -19,7 +19,7 @@ interface IEntity {
   tint: IColor;
 
   interactionVolume: IInteractionVolume;
-  children: Map<MODEL_TYPE, IEntity>;
+  children: IEntity[];
 }
 
 interface ISegment {
@@ -118,12 +118,7 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
                                                                                    , entity.tint);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
-    // XXX(JULIAN): Super Hacky:
-    const children = [];
-    for (let child of entity.children.values()) {
-      children.push(child);
-    }
-    Promise.each(children, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
+    Promise.each(entity.children, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
       callback();
     })
   });
@@ -161,15 +156,15 @@ function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IC
   , scale: scale
   , tint: tint
   , visible: true
-  , children: new Map<MODEL_TYPE, IEntity>()
+  , children: []
   , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 }
 
 function cloneEntity (entity : IEntity) : IEntity {
-  const children = new Map<MODEL_TYPE, IEntity>();
-  for (let [type, child] of entity.children) {
-    children.set(type, cloneEntity(child));
+  const children = [];
+  for (let child of entity.children) {
+    children.push(cloneEntity(child));
   }
 
   return {
@@ -195,44 +190,8 @@ function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEnti
   , visible: true
   , tint: new Uint8Array([0xFF,0xFF,0xFF,0xFF])
   , interactionVolume: null
-  , children: new Map<MODEL_TYPE, IEntity>()
+  , children: []
   };
-}
-
-
-function makeOvenModel (pos : IVector3, rot: IQuaternion) : IEntity {
-  const oven = makeModel(pos, rot, MODEL_TYPE.OVEN);
-  const ovenProjection = makeModel(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
-  ovenProjection.visible = false;
-  oven.children.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjection);
-  const ovenCancelButton = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
-  oven.children.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButton);
-  const ovenStepBackButton = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
-  oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButton);
-  const ovenStepForwardButton = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
-  oven.children.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButton);
-  return oven;
-}
-
-function makeClockModel (pos : IVector3, rot: IQuaternion) : IEntity {
-  const clock = makeModel(pos, rot, MODEL_TYPE.CLOCK);
-  const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
-  clock.children.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
-  const playPauseButton = makeModel(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
-  clock.children.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
-  const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
-  clock.children.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
-  const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
-  clock.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
-  return clock;
-}
-
-function makeShelfModel (pos : IVector3, rot: IQuaternion) : IEntity {
-  const shelf = makeModel(pos, rot, MODEL_TYPE.SHELF);
-
-  // const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
-  // shelf.children.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
-  return shelf;
 }
 
 function makeSegment (start : IVector3, end : IVector3, color: IColor) : ISegment {
@@ -316,8 +275,9 @@ function doesControllerOverlapObject (controller, obj) {
 
 
 interface IClock {
-  modelIndex: number;
+  model: IEntity;
   buttonStates: Map<MODEL_TYPE, IButtonState>;
+  buttonModels: Map<MODEL_TYPE, IEntity>;
 }
 
 
@@ -383,9 +343,15 @@ interface IRule {
 }
 
 interface IOven {
-  modelIndex: number;
+  model: IEntity;
   buttonStates: Map<MODEL_TYPE, IButtonState>;
+  buttonModels: Map<MODEL_TYPE, IEntity>;
   rules: IRule[];
+}
+
+interface IShelf {
+  model: IEntity;
+  clonableModels: IEntity[];
 }
 
 function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
@@ -394,7 +360,7 @@ function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : 
   for (let cond of conditions) {
     switch (cond.type) {
       case CONDITION_TYPE.PRESENT:
-        entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.models[STATE.oven.modelIndex].pos)
+        entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.oven.model.pos)
                                   , Quat.create()
                                   , Vec3.clone(UNIT_VECTOR3)
                                   , new Uint8Array([0xFF,0x00,0x00,0xEE])
@@ -439,22 +405,86 @@ function getIndexOfConditionsInRules (conditions: ICondition[], rules: IRule[]) 
   return -1;
 }
 
-function makeClockFn () : IClock {
-  return { modelIndex: 0
+function makeClock (pos : IVector3, rot : IQuaternion) : IClock {
+  const buttonModels = new Map<MODEL_TYPE, IEntity>();
+
+  const clockModel = makeModel(pos, rot, MODEL_TYPE.CLOCK);
+  const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
+  buttonModels.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
+  clockModel.children.push(freezeStateButton);
+  const playPauseButton = makeModel(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
+  buttonModels.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
+  clockModel.children.push(playPauseButton);
+  const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
+  buttonModels.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
+  clockModel.children.push(resetStateButton);
+  const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
+  buttonModels.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
+  clockModel.children.push(singleStepButton);
+
+  return { model: clockModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]]) };
+                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
+         , buttonModels: buttonModels };
 }
 
-function makeOvenFn () : IOven {
-  return { modelIndex: 1
+function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
+  const buttonModels = new Map<MODEL_TYPE, IEntity>();
+
+  const ovenModel = makeModel(pos, rot, MODEL_TYPE.OVEN);
+  const ovenProjectionModel = makeModel(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
+  ovenProjectionModel.visible = false;
+  buttonModels.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjectionModel);
+  ovenModel.children.push(ovenProjectionModel);
+  const ovenCancelButtonModel = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+  buttonModels.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButtonModel);
+  ovenModel.children.push(ovenCancelButtonModel);
+  const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+  buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButtonModel);
+  ovenModel.children.push(ovenStepBackButtonModel);
+  const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+  buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
+  ovenModel.children.push(ovenStepForwardButtonModel);
+
+  return { model: ovenModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
+         , buttonModels: buttonModels
          , rules: []
          };
+}
+
+function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
+  const clonableModels : IEntity[] = [];
+  const shelfModel = makeModel(pos, rot, MODEL_TYPE.SHELF);
+
+  let pedestalX = 0.7305;
+  const spherePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
+  shelfModel.children.push(spherePedestal);
+  const sphereModel = makeEntity(Vec3.fromValues(spherePedestal.pos[0], spherePedestal.pos[1] + 0.1762, spherePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE);
+  shelfModel.children.push(sphereModel);
+  clonableModels.push(sphereModel);
+
+  const cubePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
+  shelfModel.children.push(cubePedestal);
+  const cubeModel = makeEntity(Vec3.fromValues(cubePedestal.pos[0], cubePedestal.pos[1] + 0.1762, cubePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE);
+  shelfModel.children.push(cubeModel);
+  clonableModels.push(cubeModel);
+
+  const cylinderPedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
+  shelfModel.children.push(cylinderPedestal);
+  const cylinderModel = makeEntity(Vec3.fromValues(cylinderPedestal.pos[0], cylinderPedestal.pos[1] + 0.1762, cylinderPedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER);
+  shelfModel.children.push(cylinderModel);
+  clonableModels.push(cylinderModel);
+
+  return {
+    model: shelfModel
+  , clonableModels: clonableModels
+  };
 }
 
 interface IState {
@@ -506,9 +536,9 @@ function getInitialState () : IState {
   } else {
 
     // Initial Objects
-    const oven = makeOvenModel(Vec3.fromValues(0.008,0,-1.466), Quat.create());
-    const clock = makeClockModel(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
-    const shelf = makeClockModel(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
+    const oven = makeOven(Vec3.fromValues(0.008,0,-1.466), Quat.create());
+    const clock = makeClock(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
+    const shelf = makeShelf(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
     const DEFAULT_STATE : IState = {
       globalTime: 0
@@ -521,9 +551,9 @@ function getInitialState () : IState {
                 ]
               //  ]
     , storedEntities: []
-    , models: [clock, oven, shelf]
-    , clock: makeClockFn()
-    , oven: makeOvenFn()
+    , models: [clock.model, oven.model, shelf.model]
+    , clock: clock
+    , oven: oven
     // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
@@ -593,16 +623,16 @@ function pickUpEntityWithController (entity: IEntity, controller: IController) {
                                       , controller.rot), entity.rot);
 }
 
-function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, model : IEntity, modelId : MODEL_TYPE) {
+function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : IEntity, child : IEntity) {
   Quat.mul(/*out*/outRot
-          , model.rot, model.children.get(modelId).rot);
+          , parent.rot, child.rot);
   Vec3.add(/*out*/outPos
-          , model.pos, Vec3.transformQuat(/*out*/_tempVec
-                                         , model.children.get(modelId).pos, model.rot));
+          , parent.pos, Vec3.transformQuat(/*out*/_tempVec
+                                         , child.pos, parent.rot));
 }
 
 function doProcessClockInput () {
-  const buttonTypes = [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON];
+  const buttonTypes = [ MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
   for (let [client, inputData] of STATE.inputData) {
@@ -610,7 +640,7 @@ function doProcessClockInput () {
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
         for (let type of buttonTypes) {
-          getPosRotForSubObj(_tempVec, _tempQuat, STATE.models[STATE.clock.modelIndex], type);
+          getPosRotForSubObj(_tempVec, _tempQuat, STATE.clock.model, STATE.clock.buttonModels.get(type));
           if (doVolumesOverlap(controller.pos, controller.interactionVolume
                               , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
             doIntersect[type] = true;
@@ -628,24 +658,24 @@ function doProcessClockInput () {
   if (playPauseState.curr === 1 && playPauseState.last === 0) {
     if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
       STATE.simulating = SIMULATION_TYPE.FWD_CONT;
-      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
     } else {
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
     }
   }
 
   const stepFwdState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON); 
   if (stepFwdState.curr === 1 && stepFwdState.last === 0) {
       STATE.simulating = SIMULATION_TYPE.FWD_ONE;
-      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
   }
 
   const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
   if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
       STATE.simulationTime = 0;
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
       saveEntitiesToStoredEntities(STATE);
   }
 
@@ -653,7 +683,7 @@ function doProcessClockInput () {
   if (resetStateState.curr === 1 && resetStateState.last === 0) {
       STATE.simulationTime = 0;
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.models[STATE.clock.modelIndex].children.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
       restoreEntitiesFromStoredEntities(STATE);
   }
 
@@ -672,7 +702,7 @@ function doProcessOvenInput () {
       for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
         let controller = controllers[controllerIndex];
         for (let type of buttonTypes) {
-          getPosRotForSubObj(_tempVec, _tempQuat, STATE.models[STATE.oven.modelIndex], type);
+          getPosRotForSubObj(_tempVec, _tempQuat, STATE.oven.model, STATE.oven.buttonModels.get(type));
           if (doVolumesOverlap(controller.pos, controller.interactionVolume
                               , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
             doIntersect[type] = true;
@@ -683,7 +713,7 @@ function doProcessOvenInput () {
 
 
   const objectsInOven : IEntity[] = [];
-  const ovenModel = STATE.models[STATE.oven.modelIndex];
+  const ovenModel = STATE.oven.model;
   Vec3.add(/*out*/_tempVec
           , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
                                              , Vec3.fromValues(0, 0.364, 0.039), ovenModel.rot));
@@ -696,7 +726,7 @@ function doProcessOvenInput () {
         objectsInOven.push(entity);
     }
   }
-  STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
+  STATE.oven.buttonModels.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
   let conditions : ICondition[] = [];
   if (objectsInOven.length > 0) {
     for (var obj of objectsInOven) {
@@ -731,10 +761,10 @@ function doProcessOvenInput () {
   if (cancelState.curr === 1 && cancelState.last === 0) {
     // if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
     //   STATE.simulating = SIMULATION_TYPE.FWD_CONT;
-    //   Quat.copy(/*out*/STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_FLIPPED_ROT);
+    //   Quat.copy(/*out*/STATE.oven.model.children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_FLIPPED_ROT);
     // } else {
     //   STATE.simulating = SIMULATION_TYPE.PAUSED;
-    //   Quat.copy(/*out*/STATE.models[STATE.oven.modelIndex].children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_BASE_ROT);
+    //   Quat.copy(/*out*/STATE.oven.model.children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_BASE_ROT);
     // }
   }
 
