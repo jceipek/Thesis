@@ -19,7 +19,7 @@ interface IEntity {
   tint: IColor;
 
   interactionVolume: IInteractionVolume;
-  children: IEntity[];
+  children: IEntityList;
 }
 
 interface ISegment {
@@ -118,7 +118,7 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
                                                                                    , entity.tint);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
-    Promise.each(entity.children, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
+    Promise.each(entity.children.entities, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
       callback();
     })
   });
@@ -156,28 +156,40 @@ function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IC
   , scale: scale
   , tint: tint
   , visible: true
-  , children: []
+  , children: makeEntityList(pos, rot)
   , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   };
 }
 
 function cloneEntity (entity : IEntity) : IEntity {
-  const children = [];
-  for (let child of entity.children) {
-    children.push(cloneEntity(child));
+  const pos = Vec3.clone(entity.pos);
+  const rot = Quat.clone(entity.rot);
+  const children = makeEntityList(pos, rot);
+  for (let child of entity.children.entities) {
+    children.entities.push(cloneEntity(child));
   }
 
   return {
     type: entity.type
   , id: _latestEntityId++
-  , pos: Vec3.clone(entity.pos)
-  , rot: Quat.clone(entity.rot)
+  , pos: pos
+  , rot: rot
   , scale: Vec3.clone(entity.scale)
   , visible: entity.visible
   , children: children
   , tint: new Uint8Array(entity.tint)
   , interactionVolume: entity.interactionVolume
   };
+}
+
+function applyOffsetToEntity (entity : IEntity, offsetPos : IVector3, offsetRot : IQuaternion) {
+  const rot = Quat.mul(/*out*/Quat.create()
+                      , offsetRot, entity.rot);
+  const pos = Vec3.add(/*out*/Vec3.create()
+                      , offsetPos, Vec3.transformQuat(/*out*/_tempVec
+                                                     , entity.pos, offsetRot));
+  Vec3.copy(entity.pos, pos);
+  Quat.copy(entity.rot, rot);
 }
 
 function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEntity {
@@ -190,7 +202,7 @@ function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEnti
   , visible: true
   , tint: new Uint8Array([0xFF,0xFF,0xFF,0xFF])
   , interactionVolume: null
-  , children: []
+  , children: makeEntityList(pos, rot)
   };
 }
 
@@ -268,9 +280,11 @@ function doVolumesOverlap (posA : IVector3, volA : IInteractionVolume, posB : IV
   return false;
 }
 
-function doesControllerOverlapObject (controller, obj) {
+function doesControllerOverlapObject (controller : IController, obj : IEntity, objOffsetPos : IVector3, objOffsetRot : IQuaternion) {
+  // TODO(JULIAN): Switch the interaction volume to exist on the controller tip!
+  Vec3.add(/*out*/_tempVec, objOffsetPos, Vec3.transformQuat(/*out*/_tempVec,obj.pos, objOffsetRot));
   return doVolumesOverlap(controller.pos, controller.interactionVolume
-                         , obj.pos, obj.interactionVolume);
+                         , _tempVec, obj.interactionVolume);
 }
 
 
@@ -339,7 +353,7 @@ function makeMoveByAction (posOffset : IVector3, rotOffset : IQuaternion) : IAct
 interface IRule {
   conditions: ICondition[];
   actions: IAction[];
-  entities: IEntity[];
+  entities: IEntityList;
 }
 
 interface IOven {
@@ -347,30 +361,34 @@ interface IOven {
   buttonStates: Map<MODEL_TYPE, IButtonState>;
   buttonModels: Map<MODEL_TYPE, IEntity>;
   rules: IRule[];
+
+  actionIndex: number;
+  lastRule: IRule;
+  currRule: IRule;
 }
 
 interface IShelf {
   model: IEntity;
-  clonableModels: IEntity[];
+  clonableModels: IEntityList;
 }
 
 function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
-  let entities = [];
+  let entitiesList = makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot);
   let offset = 0;
   for (let cond of conditions) {
     switch (cond.type) {
       case CONDITION_TYPE.PRESENT:
-        entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.oven.model.pos)
-                                  , Quat.create()
-                                  , Vec3.clone(UNIT_VECTOR3)
-                                  , new Uint8Array([0xFF,0x00,0x00,0xEE])
-                                  , (<IPresentCondition>cond).objtype));
+        entitiesList.entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.oven.model.pos)
+                                             , Quat.create()
+                                             , Vec3.clone(UNIT_VECTOR3)
+                                             , new Uint8Array([0xFF,0x00,0x00,0xEE])
+                                             , (<IPresentCondition>cond).objtype));
     }
   }
   return {
     conditions: conditions
   , actions: []
-  , entities: entities
+  , entities: entitiesList
   };
 }
 
@@ -411,16 +429,16 @@ function makeClock (pos : IVector3, rot : IQuaternion) : IClock {
   const clockModel = makeModel(pos, rot, MODEL_TYPE.CLOCK);
   const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
-  clockModel.children.push(freezeStateButton);
+  clockModel.children.entities.push(freezeStateButton);
   const playPauseButton = makeModel(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
-  clockModel.children.push(playPauseButton);
+  clockModel.children.entities.push(playPauseButton);
   const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
-  clockModel.children.push(resetStateButton);
+  clockModel.children.entities.push(resetStateButton);
   const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
-  clockModel.children.push(singleStepButton);
+  clockModel.children.entities.push(singleStepButton);
 
   return { model: clockModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, {curr: 0, last: 0}]
@@ -437,16 +455,16 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
   const ovenProjectionModel = makeModel(Vec3.fromValues(0,0,0), Quat.fromValues(-0.7071068, 0, 0, 0.7071068), MODEL_TYPE.OVEN_PROJECTION_SPACE);
   ovenProjectionModel.visible = false;
   buttonModels.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjectionModel);
-  ovenModel.children.push(ovenProjectionModel);
+  ovenModel.children.entities.push(ovenProjectionModel);
   const ovenCancelButtonModel = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
   buttonModels.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButtonModel);
-  ovenModel.children.push(ovenCancelButtonModel);
+  ovenModel.children.entities.push(ovenCancelButtonModel);
   const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
   buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButtonModel);
-  ovenModel.children.push(ovenStepBackButtonModel);
+  ovenModel.children.entities.push(ovenStepBackButtonModel);
   const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
   buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
-  ovenModel.children.push(ovenStepForwardButtonModel);
+  ovenModel.children.entities.push(ovenStepForwardButtonModel);
 
   return { model: ovenModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
@@ -455,35 +473,106 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
                                                            , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
          , buttonModels: buttonModels
          , rules: []
+         , actionIndex: -1
+         , lastRule: null
+         , currRule: null
          };
 }
 
+function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion) : IEntityList {
+  return {
+    entities: []
+  , offsetPos: posOffset 
+  , offsetRot: rotOffset 
+  };
+}
+
 function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
-  const clonableModels : IEntity[] = [];
   const shelfModel = makeModel(pos, rot, MODEL_TYPE.SHELF);
+  const clonableModels : IEntityList = makeEntityList(pos, rot);
 
   let pedestalX = 0.7305;
   const spherePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
-  shelfModel.children.push(spherePedestal);
+  shelfModel.children.entities.push(spherePedestal);
   const sphereModel = makeEntity(Vec3.fromValues(spherePedestal.pos[0], spherePedestal.pos[1] + 0.1762, spherePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE);
-  shelfModel.children.push(sphereModel);
-  clonableModels.push(sphereModel);
+  shelfModel.children.entities.push(sphereModel);
+  clonableModels.entities.push(sphereModel);
+
 
   const cubePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
-  shelfModel.children.push(cubePedestal);
+  shelfModel.children.entities.push(cubePedestal);
   const cubeModel = makeEntity(Vec3.fromValues(cubePedestal.pos[0], cubePedestal.pos[1] + 0.1762, cubePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE);
-  shelfModel.children.push(cubeModel);
-  clonableModels.push(cubeModel);
+  shelfModel.children.entities.push(cubeModel);
+  clonableModels.entities.push(cubeModel);
 
   const cylinderPedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
-  shelfModel.children.push(cylinderPedestal);
+  shelfModel.children.entities.push(cylinderPedestal);
   const cylinderModel = makeEntity(Vec3.fromValues(cylinderPedestal.pos[0], cylinderPedestal.pos[1] + 0.1762, cylinderPedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER);
-  shelfModel.children.push(cylinderModel);
-  clonableModels.push(cylinderModel);
+  shelfModel.children.entities.push(cylinderModel);
+  clonableModels.entities.push(cylinderModel);
 
   return {
     model: shelfModel
   , clonableModels: clonableModels
+  };
+}
+
+const enum ALTERATION_TYPE {
+  MOVE
+, DELETE
+}
+
+interface IAlteration {
+  type: ALTERATION_TYPE;
+  entitiesList: IEntityList;
+}
+
+interface IControllerMetadata {
+  controller: IController;
+  startPos: IVector3;
+  startRot: IQuaternion;
+  offsetPos: IVector3;
+  offsetRot: IQuaternion;
+}
+
+interface IAlterationMove extends IAlteration {
+  entity: IEntity;
+  controllerMetadata: IControllerMetadata;
+}
+
+interface IAlterationDelete extends IAlteration {
+  entity: IEntity;
+  controllerMetadata : IControllerMetadata;
+}
+
+function makeControllerMetadataFromEntityAndController (entity : IEntity, controller : IController) : IControllerMetadata {
+  const offsetPos : IVector3 = Vec3.create();
+  const offsetRot : IQuaternion = Quat.create();
+  Vec3.transformQuat(/*out*/offsetPos
+                    , Vec3.sub(/*out*/offsetPos
+                              , entity.pos, controller.pos)
+                    , Quat.invert(/*out*/offsetRot
+                                    , controller.rot));
+
+  Quat.mul(/*out*/offsetRot
+          , Quat.invert(/*out*/offsetRot
+                       , controller.rot), entity.rot);
+
+  return {
+    controller: controller
+  , startPos: Vec3.clone(entity.pos)
+  , startRot: Quat.clone(entity.rot)
+  , offsetPos: offsetPos
+  , offsetRot: offsetRot
+  };
+}
+
+function makeMoveAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationMove {
+  return {
+    type: ALTERATION_TYPE.MOVE
+  , entitiesList: entitiesList
+  , entity: entity
+  , controllerMetadata: makeControllerMetadataFromEntityAndController(entity, controller)
   };
 }
 
@@ -492,40 +581,43 @@ interface IState {
   simulationTime: number;
   simulating: SIMULATION_TYPE;
   inputData: Map<string,IInputData>;
-  entities: IEntity[];
-  storedEntities: IEntity[];
-  models: IEntity[];
+  inProgressAlterations: IAlteration[]
+
+  entities: IEntityList;
+  storedEntities: IEntityList;
+  models: IEntityList;
   clock: IClock;
   oven: IOven;
+  shelf: IShelf;
   // latestEntityId: number;
   segments: ISegment[]
 }
 
 function saveEntitiesToStoredEntities (state : IState) {
-  state.storedEntities.length = 0;
-  for (let entity of state.entities) {
-    state.storedEntities.push(cloneEntity(entity));
+  state.storedEntities.entities.length = 0;
+  for (let entity of state.entities.entities) {
+    state.storedEntities.entities.push(cloneEntity(entity));
   }
 }
 
 function restoreEntitiesFromStoredEntities (state : IState) {
   const oldEntityIds = new Set();
-  for (let entity of state.entities) {
+  for (let entity of state.entities.entities) {
     oldEntityIds.add(entity.id);
   }
-  for (let entity of state.storedEntities) {
+  for (let entity of state.storedEntities.entities) {
     if (oldEntityIds.has(entity.id)) {
       oldEntityIds.delete(entity.id);
     }
   }
-  for (let entity of state.entities) {
+  for (let entity of state.entities.entities) {
     if (oldEntityIds.has(entity.id)) {
       entity.visible = false; // XXX(JULIAN): Would be better to actually delete the entity... 
-      state.storedEntities.push(entity);
+      state.storedEntities.entities.push(entity);
     }
   }
   state.entities = state.storedEntities;
-  state.storedEntities = [];
+  state.storedEntities.entities = [];
   saveEntitiesToStoredEntities(state);
 }
 
@@ -540,20 +632,30 @@ function getInitialState () : IState {
     const clock = makeClock(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
     const shelf = makeShelf(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
+    const entitiesList = makeEntityList(Vec3.create(), Quat.create());
+    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER));
+    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE));
+
+    const modelsList = makeEntityList(Vec3.create(), Quat.create());
+    modelsList.entities.push(clock.model);
+    modelsList.entities.push(oven.model);
+    modelsList.entities.push(shelf.model);
+
     const DEFAULT_STATE : IState = {
       globalTime: 0
     , simulationTime: 0
     , simulating: SIMULATION_TYPE.PAUSED
     , inputData: new Map<string,IInputData>()
-    , entities: [ makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE)
-                , makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER)
-                , makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE)
-                ]
+    , entities: entitiesList
               //  ]
-    , storedEntities: []
-    , models: [clock.model, oven.model, shelf.model]
+    , storedEntities: makeEntityList(Vec3.create(), Quat.create())
+    , models: modelsList
     , clock: clock
     , oven: oven
+    , shelf: shelf
+
+    , inProgressAlterations: []
     // , latestEntityId: 0
     , segments: []
               //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
@@ -589,21 +691,55 @@ function getInitialState () : IState {
 // Quat.copy(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT);
 
 
+interface IEntityList {
+  entities: IEntity[];
+  offsetPos: IVector3;
+  offsetRot: IQuaternion;
+}
+
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
-function getClosestEntityToPoint (entities: IEntity[], pt : IVector3) : IEntity|null {
+function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVector3) : [IEntity|null, IEntityList] {
   let closest = null;
+  let closestSourceList : IEntityList = null;
   let sqrDistance = Infinity;
-  for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
-    let entity = entities[entityIndex];
-    let currSqrDist = Vec3.sqrDist(entity.pos, pt);
-    if (currSqrDist < sqrDistance) {
-      sqrDistance = currSqrDist; 
-      closest = entity;
+  for (let entityList of entityLists) {
+    for (let entity of entityList.entities) {
+      if (entity === null) {
+        continue;
+      }
+      Vec3.add(/*out*/_tempVec
+              , entityList.offsetPos
+              , Vec3.transformQuat(/*out*/_tempVec
+                                  , entity.pos, entityList.offsetRot));
+      let currSqrDist = Vec3.sqrDist(_tempVec, pt);
+      if (currSqrDist < sqrDistance) {
+        sqrDistance = currSqrDist; 
+        closest = entity;
+        closestSourceList = entityList;
+      }
     }
   }
-  return closest;
+  
+  return [closest, closestSourceList];
 }
+
+// function getClosestEntityToPoint (entities: IEntity[], pt : IVector3) : IEntity|null {
+//   let closest = null;
+//   let sqrDistance = Infinity;
+//   for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
+//     let entity = entities[entityIndex];
+//     if (entity === null) {
+//       continue;
+//     }
+//     let currSqrDist = Vec3.sqrDist(entity.pos, pt);
+//     if (currSqrDist < sqrDistance) {
+//       sqrDistance = currSqrDist; 
+//       closest = entity;
+//     }
+//   }
+//   return closest;
+// }
 
 function pickUpEntityWithController (entity: IEntity, controller: IController) {
   controller.pickedUpObject = entity;
@@ -719,8 +855,7 @@ function doProcessOvenInput () {
                                              , Vec3.fromValues(0, 0.364, 0.039), ovenModel.rot));
 
   const entities = STATE.entities;
-  for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
-    let entity = entities[entityIndex];
+  for (let entity of entities.entities) {
     if (doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
                         , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
         objectsInOven.push(entity);
@@ -743,13 +878,20 @@ function doProcessOvenInput () {
       // rule for this condition doesn't exist yet, so we need to make it
       ruleIndex = STATE.oven.rules.push(makeEmptyRuleForConditions(STATE, conditions)) - 1;
     }
+    STATE.oven.currRule = STATE.oven.rules[ruleIndex];
+    if (STATE.oven.currRule != STATE.oven.lastRule) {
+      // We switched to a different rule!
+      STATE.oven.actionIndex = STATE.oven.currRule.actions.length - 1;
+    }
 
-    const newActions = doProcessControllerInput(STATE.oven.rules[ruleIndex].entities, true);
-    STATE.oven.rules[ruleIndex].actions.push(...newActions);
+    // TODO(JULIAN): Implement actions!
+    //const newActions = doProcessControllerInput(STATE.oven.rules[ruleIndex].entities, true);
+    //STATE.oven.rules[ruleIndex].actions.push(...newActions);
 
   } else {
     // We're not working on any rules
-
+    STATE.oven.currRule = null;
+    STATE.oven.actionIndex = -1;
   }
 
   for (let type of buttonTypes) {
@@ -759,29 +901,29 @@ function doProcessOvenInput () {
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0) {
-    // if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
-    //   STATE.simulating = SIMULATION_TYPE.FWD_CONT;
-    //   Quat.copy(/*out*/STATE.oven.model.children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_FLIPPED_ROT);
-    // } else {
-    //   STATE.simulating = SIMULATION_TYPE.PAUSED;
-    //   Quat.copy(/*out*/STATE.oven.model.children.get(MODEL_TYPE.oven_PLAY_PAUSE_BUTTON).rot, oven_BUTTON_BASE_ROT);
-    // }
+    // TODO(JULIAN): Delete all actions on this rule
   }
 
   const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
   if (stepBackState.curr === 1 && stepBackState.last === 0) {
-
+    if (STATE.oven.actionIndex - 1 >= -1 && STATE.oven.actionIndex - 1 < STATE.oven.currRule.actions.length) {
+      STATE.oven.actionIndex--;
+    }
   }
 
   const stepForwardState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON); 
   if (stepForwardState.curr === 1 && stepForwardState.last === 0) {
-
+    if (STATE.oven.actionIndex + 1 >= -1 && STATE.oven.actionIndex + 1 < STATE.oven.currRule.actions.length) {
+      STATE.oven.actionIndex++;
+    }
   }
 
   for (let type of buttonTypes) {
     const state = STATE.oven.buttonStates.get(type);
     state.last = state.curr; 
   }
+
+  STATE.oven.lastRule = STATE.oven.currRule;
 }
 
 function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
@@ -791,90 +933,6 @@ function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
     }
   }
   return false;
-}
-
-function doProcessControllerInput (entities : IEntity[], doDebug : boolean) : IAction[] {
-  const actionList : IAction[] = [];
-  let objectPoints = new Map<IEntity, Array<IController>>();
-  for (let [client, inputData] of STATE.inputData) {
-      let controllers = inputData.controllers;
-      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
-        let controller = controllers[controllerIndex];
-        if (controller.grab.curr && !controller.grab.last) {
-          let closestEntity = getClosestEntityToPoint(entities, controller.pos);
-          if (closestEntity != null && doesControllerOverlapObject(controller, closestEntity)) {
-            // if (closestEntity.type == ENTITY_TYPE.CLONER) {
-            //   // let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array(closestEntity.color), ENTITY_TYPE.DEFAULT);
-            //   let clonedObject = makeEntityFn(Vec3.clone(closestEntity.pos), Quat.clone(closestEntity.rot), Vec3.clone(closestEntity.vel), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT);
-            //   console.log(clonedObject);
-            //   STATE.entities.push(clonedObject);
-            //   pickUpEntityWithController(clonedObject, controller);
-            // } else {
-            pickUpEntityWithController(closestEntity, controller);
-            // }
-          }
-        }
-
-        if (!controller.grab.curr) {
-          if (controller.pickedUpObject != null) {
-            if (doDebug && entityIsInList(controller.pickedUpObject, entities)) {
-            Quat.mul(/*out*/_tempQuat
-                    , Quat.mul(/*out*/_tempQuat
-                              , controller.rot
-                              , controller.pickedUpObjectRotOffset)
-                    , Quat.invert(/*out*/Quat.create()
-                                 , controller.pickedUpObjectRot));
-            const newAction = makeMoveByAction(Vec3.sub(/*out*/Vec3.create()
-                                                     , Vec3.add(/*out*/_tempVec
-                                                               , controller.pos
-                                                               , Vec3.transformQuat(/*out*/_tempVec
-                                                                                   , controller.pickedUpObjectOffset
-                                                                                   , controller.rot))
-                                                     , controller.pickedUpObjectPos)
-                                              , Quat.clone(_tempQuat));
-
-              actionList.push(newAction);
-            }
-            
-            controller.pickedUpObject = null;
-          }
-        } else if (controller.pickedUpObject != null) {
-          // objectPoints
-
-          if (!objectPoints.has(controller.pickedUpObject)) {
-            objectPoints.set(controller.pickedUpObject, []);
-          }
-          objectPoints.get(controller.pickedUpObject).push(controller);
-        }
-
-      }
-  }
-
-  for (let [entity, controllerList] of objectPoints) {
-    controllerList.sort((a, b) => a.pickedUpObjectTime.getTime() - b.pickedUpObjectTime.getTime()); // ascending order, so earlier time is earlier
-    if (controllerList.length > 0) {
-      let controller = controllerList[0];
-      Vec3.add(/*out*/controller.pickedUpObject.pos
-              , controller.pos, Vec3.transformQuat(/*out*/controller.pickedUpObject.pos
-                                                  , controller.pickedUpObjectOffset, controller.rot));
-
-      Quat.mul(/*out*/controller.pickedUpObject.rot, controller.rot, controller.pickedUpObjectRotOffset);
-    }
-    // if (controllerList.length > 1) {
-    //   let controller = controllerList[1];
-    //   Vec3.sub(/*out*/entity.vel, controller.pos, entity.pos);
-    //   Vec3.transformQuat(/*out*/entity.vel, entity.vel, Quat.invert(/*out*/_tempQuat, entity.rot));
-    // }
-  }
-
-  if (actionList.length > 0) {
-    console.log(`NEW ACTIONS: ${doDebug? 'oven' : 'NOT_OVEN!!!!!!!!!!!!!!!!!!!!!!!'}`);
-    for (let action of actionList) {
-      console.log(`TYPE: ${action.type}, POS: ${(<IMoveByAction>action).posOffset}, ROT: ${(<IMoveByAction>action).rotOffset}`);
-    }
-  }
-
-  return actionList;
 }
 
 function performActionOnEntity (action : IAction, entity : IEntity) {
@@ -887,6 +945,112 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
       console.error("TODO(JULIAN): Implement 'Delete' action");
       break;
   }
+}
+
+
+function didControllerJustGrab (controller : IController) : boolean {
+  return (controller.grab.curr === 1) && (controller.grab.last === 0);
+}
+
+function didControllerJustRelease (controller : IController) : boolean {
+  return (controller.grab.curr === 0) && (controller.grab.last === 1);
+}
+
+function alterationThatUsesController (controller : IController, alterations : IAlteration[]) : IAlteration | null {
+  for (let alteration of alterations) {
+    switch (alteration.type) {
+      case ALTERATION_TYPE.MOVE:
+        if ((<IAlterationMove>alteration).controllerMetadata.controller === controller) {
+          return alteration;
+        }
+        break;
+      case ALTERATION_TYPE.DELETE:
+        if ((<IAlterationDelete>alteration).controllerMetadata.controller === controller) {
+          return alteration;
+        }
+        break;
+    }
+  }
+  return null;
+}
+
+function doProcessControllerInput () : IAction[] {
+  const newActions : IAction[] = [];
+  const newInProgressAlterations : IAlteration[] = [];
+
+  let worldEntities = STATE.entities;
+  let ovenEntities = STATE.oven.currRule === null? makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot) : STATE.oven.currRule.entities;
+  let shelfEntities = STATE.shelf.clonableModels;
+  const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
+  // STATE.inProgressAlterations
+
+
+  for (let [client, inputData] of STATE.inputData) {
+    let controllers = inputData.controllers;
+    for (let controller of controllers) {
+      const usedAlteration = alterationThatUsesController(controller, STATE.inProgressAlterations);
+      if (usedAlteration === null) {
+        // Process if controller not used!
+        if (didControllerJustGrab(controller)) {
+          let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
+          if (closestEntity !== null) {
+            // TODO(JULIAN): If the entity already exists in another alteration, need to replace that alteration or modify it or delete it
+
+            // TODO(JULIAN): Handle Delete Alterations as well as move; based on the controller tip
+            if (doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
+              if (sourceList === shelfEntities) {
+                closestEntity = cloneEntity(closestEntity);
+                applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
+                sourceList = worldEntities;
+                worldEntities.entities.push(closestEntity);
+              }
+              
+              newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, sourceList));
+            }
+          }
+        }
+      } else {
+        // Process if controller already used!
+        switch (usedAlteration.type) {
+          case ALTERATION_TYPE.MOVE:
+            const entityToMove = (<IAlterationMove>usedAlteration).entity;
+            const controllerMetadata = (<IAlterationMove>usedAlteration).controllerMetadata;
+
+            Vec3.add(/*out*/entityToMove.pos
+                    , controller.pos, Vec3.transformQuat(/*out*/entityToMove.pos
+                                                        , controllerMetadata.offsetPos, controller.rot));
+
+            Quat.mul(/*out*/entityToMove.rot, controller.rot, controllerMetadata.offsetRot);
+            
+            if (didControllerJustRelease(controller)) {
+              // DELETE this alteration; make a new action for it...
+            } else {
+              newInProgressAlterations.push(usedAlteration);
+            }
+          break;
+          case ALTERATION_TYPE.DELETE:
+            // (<IAlterationDelete>usedAlteration)
+
+          break;
+        } 
+        
+      }
+    }
+  }
+
+  for (let [client, inputData] of STATE.inputData) {
+    let controllers = inputData.controllers;
+    for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
+      let controller = controllers[controllerIndex];
+      controller.grab.last = controller.grab.curr; // So that we can grab things
+      controller.action0.last = controller.action0.curr;
+    }
+  }
+
+  STATE.inProgressAlterations.length = 0;
+  STATE.inProgressAlterations.push(...newInProgressAlterations);
+
+  return newActions; 
 }
 
 
@@ -904,23 +1068,14 @@ NETWORK.bind(undefined, undefined, () => {
 
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
-    doProcessClockInput();
-    doProcessOvenInput();
-    doProcessControllerInput(STATE.entities, false);
-
-    for (let [client, inputData] of STATE.inputData) {
-      let controllers = inputData.controllers;
-      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
-        let controller = controllers[controllerIndex];
-        controller.grab.last = controller.grab.curr; // So that we can grab things
-        controller.action0.last = controller.action0.curr;
-      }
-    }
+    // doProcessClockInput();
+    // doProcessOvenInput();
+    // doProcessControllerInput(STATE.entities, false);
+    doProcessControllerInput();
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
       const entities = STATE.entities;
-      for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
-        let entity = entities[entityIndex];
+      for (let entity of entities.entities) {
         // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
 
         // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply
@@ -950,11 +1105,11 @@ NETWORK.bind(undefined, undefined, () => {
 
     // TRANSFER STATE
     sendSimulationTimePromise(STATE.simulationTime).then(() => {
-      Promise.each(STATE.models, (model) => { return sendModelPromise(model); }).then(() => {
-        Promise.each(STATE.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
+      Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
+        Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
 
           // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
-          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
+          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities.entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
         // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
           let avatarStuffToSend = [];
           for (let remoteClient of STATE.inputData.keys()) {
