@@ -74,7 +74,7 @@ public class NetManager : MonoBehaviour {
         }
     }
 
-    void Update () {
+    void LateUpdate () {
         // if (_writeMessageBuffer.Count > 0) {
             _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
             // Debug.Log(_readMessageBuffer.Count);

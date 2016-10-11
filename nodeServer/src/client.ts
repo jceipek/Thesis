@@ -83,18 +83,41 @@ function sendTarget (message : Buffer, messageLength: number, host: string, port
 let _currSeqId = 0;
 
 const BASE_COLOR = new Uint8Array([0xFF,0xFF,0xFF,0xFF]);
-
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR);
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                       , _currSeqId
+                                                                                       , inputData.headset.id
+                                                                                       , MODEL_TYPE.HEADSET
+                                                                                       , inputData.headset.pos
+                                                                                       , inputData.headset.rot
+                                                                                       , UNIT_VECTOR3
+                                                                                       , true
+                                                                                       , BASE_COLOR);
   _currSeqId++;
   let [host, portString] = destination.split(':');
   let port = parseInt(portString, 10);
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
   sendTarget(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR);
+    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                         , _currSeqId
+                                                                                         , controller0.id
+                                                                                         , MODEL_TYPE.CONTROLLER_BASE
+                                                                                         , controller0.pos
+                                                                                         , controller0.rot
+                                                                                         , UNIT_VECTOR3
+                                                                                         , true
+                                                                                         , BASE_COLOR);
     sendTarget(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR);
+      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                           , _currSeqId
+                                                                                           , controller1.id
+                                                                                           , MODEL_TYPE.CONTROLLER_BASE
+                                                                                           , controller1.pos
+                                                                                           , controller1.rot
+                                                                                           , UNIT_VECTOR3
+                                                                                           , true
+                                                                                           , BASE_COLOR);
       sendTarget(_sendBuffer, messageLength, host, port, callback);
     });
   });
@@ -109,15 +132,15 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
   const scale = Vec3.mul(/*out*/Vec3.create()
                         , entity.scale, offsetscale);
   const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                   , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                   , _currSeqId
-                                                                                   , entity.id
-                                                                                   , entity.type
-                                                                                   , pos
-                                                                                   , rot
-                                                                                   , scale
-                                                                                   , entity.visible
-                                                                                   , entity.tint);
+                                                                                       , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                       , _currSeqId
+                                                                                       , entity.id
+                                                                                       , entity.type
+                                                                                       , pos
+                                                                                       , rot
+                                                                                       , scale
+                                                                                       , entity.visible
+                                                                                       , entity.tint);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
     Promise.each(entity.children.entities, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
@@ -635,9 +658,9 @@ function getInitialState () : IState {
     const shelf = makeShelf(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
     const entitiesList = makeEntityList(Vec3.create(), Quat.create());
-    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
-    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER));
-    entitiesList.entities.push(makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE));
+    // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+    // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER));
+    // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE));
 
     const modelsList = makeEntityList(Vec3.create(), Quat.create());
     modelsList.entities.push(clock.model);
@@ -984,8 +1007,6 @@ function doProcessControllerInput () : IAction[] {
   let ovenEntities = STATE.oven.currRule === null? makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot) : STATE.oven.currRule.entities;
   let shelfEntities = STATE.shelf.clonableModels;
   const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
-  // STATE.inProgressAlterations
-
 
   for (let [client, inputData] of STATE.inputData) {
     let controllers = inputData.controllers;
@@ -1119,6 +1140,7 @@ NETWORK.bind(undefined, undefined, () => {
               if (remoteClient !== client) {
                 avatarStuffToSend.push({destination: remoteClient, data: inputData})
               }
+              avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
             }
           }
 
