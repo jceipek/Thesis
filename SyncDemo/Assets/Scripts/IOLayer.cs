@@ -130,9 +130,7 @@ public class IOLayer : MonoBehaviour {
         UpdateDataForTrackedObject (_headsetTrackedObject, poses, _headsetData);
         UpdateDataForTrackedObject (_controller0TrackedObject, poses, _controller0Data);
         UpdateDataForTrackedObject (_controller1TrackedObject, poses, _controller1Data);
-    }
 
-    void Update () {
         NetManager.G.SendInputData(_headsetData.position, _headsetData.rotation,
                                    _controller0Data.position, _controller0Data.rotation, _controller0Data.grabbed, _controller0Data.action0,
                                    _controller1Data.position, _controller1Data.rotation, _controller1Data.grabbed, _controller1Data.action0);
