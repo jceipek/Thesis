@@ -82,17 +82,19 @@ function sendTarget (message : Buffer, messageLength: number, host: string, port
 
 let _currSeqId = 0;
 
+const BASE_COLOR = new Uint8Array([0xFF,0xFF,0xFF,0xFF]);
+
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3);
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR);
   _currSeqId++;
   let [host, portString] = destination.split(':');
   let port = parseInt(portString, 10);
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
   sendTarget(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3);
+    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR);
     sendTarget(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3);
+      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR);
       sendTarget(_sendBuffer, messageLength, host, port, callback);
     });
   });
