@@ -24,6 +24,7 @@ var typeLengths = {
 
 const TYPE_INFO = {
   'MessageType': {js: 'MESSAGE_TYPE', cs: 'MessageType', len: 1}
+, 'ControllerAttachmentTypes': {js: 'CONTROLLER_ATTACHMENT_TYPES', cs: 'ControllerAttachmentTypes', len: 2} // XXX(JULIAN): Doesn't work for a different number than 2 controllers
 , 'ModelType': {js: 'MODEL_TYPE', cs: 'ModelType', len: 2}
 , 'Float': {js: 'number', cs: 'float', len: 4}
 , 'Int32': {js: 'number', cs: 'int', len: 4}
@@ -47,6 +48,13 @@ const MODEL_TYPE_IDENT = {cs: 'ModelType', js: 'modelType'}
 const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
 const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
 const TIME_IDENT = {cs: 'Time', js: 'time'}
+const CONTROLLER_ATTACHMENT_IDENT = {cs: 'ControllerAttachments', js: 'controllerAttachments'}
+
+const CONTROLLER_ATTACHMENT_TYPES = [
+  {cs: 'None', js: 'NONE'}
+, {cs: 'Grab', js: 'GRAB'}
+, {cs: 'Delete', js: 'DELETE'}
+];
 
 const MODEL_TYPES = [
   {cs: 'None', js: 'NONE'}
@@ -141,6 +149,12 @@ const MESSAGES : IMessage[] = [
             , {ident: TIME_IDENT, customType: 'Float'}
             ]
   }
+, { name: 'ControllerAttachment'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: CONTROLLER_ATTACHMENT_IDENT, customType: 'ControllerAttachmentTypes'}
+            ]
+  }
 ];
 
 function jsWriteForType (type: string, identifier: string) {
@@ -148,6 +162,10 @@ function jsWriteForType (type: string, identifier: string) {
   switch (type) {
     case 'MessageType':
       output += `  offset = buf.writeInt8(${identifier}, offset, true);\n`
+      break;
+    case 'ControllerAttachmentTypes':
+      output += `  offset = buf.writeInt8(${identifier}[0], offset, true);\n`
+      output += `  offset = buf.writeInt8(${identifier}[1], offset, true);\n`
       break;
     case 'ModelType':
       output += `  offset = buf.writeUInt16LE(${identifier}, offset, true);\n`
@@ -208,6 +226,10 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output += "export const enum CONTROLLER_ATTACHMENT_TYPE {\n";
+  output += CONTROLLER_ATTACHMENT_TYPES.map((attachmentType, index) => `  ${attachmentType.js} = ${numHex(index)}`).join(',\n');
+  output += "\n}\n\n";
+
   output += "export const enum MODEL_TYPE {\n";
   output += MODEL_TYPES.map((modelTypes, index) => `  ${modelTypes.js} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
@@ -236,6 +258,21 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output +=
+`public struct ControllerAttachmentTypes {
+\tpublic ControllerAttachmentType a;
+\tpublic ControllerAttachmentType b;
+\tpublic ControllerAttachmentTypes (ControllerAttachmentType a, ControllerAttachmentType b) {
+\t\tthis.a = a;
+\t\tthis.b = b;
+\t}
+}
+`
+
+  output += "public enum ControllerAttachmentType {\n";
+  output += CONTROLLER_ATTACHMENT_TYPES.map((attachmentType, index) => `  ${attachmentType.cs} = ${numHex(index)}`).join(',\n');
+  output += "\n}\n\n";
+
   output += "public enum ModelType {\n";
   output += MODEL_TYPES.map((modelTypes, index) => `  ${modelTypes.cs} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
@@ -253,6 +290,14 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t\tMessageType res = (MessageType)data[offset];
   \t\toffset += 1;
   \t\treturn res;
+  \t}
+
+  \tstatic ControllerAttachmentTypes ControllerAttachmentTypesFromBuff (byte[] data, ref int offset) {
+  \t\tControllerAttachmentType res0 = (ControllerAttachmentType)data[offset];
+  \t\toffset += 1;
+  \t\tControllerAttachmentType res1 = (ControllerAttachmentType)data[offset];
+  \t\toffset += 1;
+  \t\treturn new ControllerAttachmentTypes(res0, res1);
   \t}
 
   \tstatic ModelType ModelTypeFromBuff (byte[] data, ref int offset) {

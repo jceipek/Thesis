@@ -12,7 +12,14 @@ export const enum MESSAGE_TYPE {
   PositionRotationScaleVisibleTintModel = 0X03,
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
-  SimulationTime = 0X06
+  SimulationTime = 0X06,
+  ControllerAttachment = 0X07
+}
+
+export const enum CONTROLLER_ATTACHMENT_TYPE {
+  NONE = 0X00,
+  GRAB = 0X01,
+  DELETE = 0X02
 }
 
 export const enum MODEL_TYPE {
@@ -147,6 +154,14 @@ export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, 
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeFloatLE(time, offset, true);
+  return offset;
+}
+
+export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, controllerAttachments : CONTROLLER_ATTACHMENT_TYPES) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  offset = buf.writeInt8(controllerAttachments[0], offset, true);
+  offset = buf.writeInt8(controllerAttachments[1], offset, true);
   return offset;
 }
 

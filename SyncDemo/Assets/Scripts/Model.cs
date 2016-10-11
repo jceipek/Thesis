@@ -25,11 +25,13 @@ public class Model : MonoBehaviour {
 				maxIndex = (int)_modelTypesToPrefabs[i].ModelType;
 			}
 		}
-		_prefabsForModels = new GameObject[maxIndex+1];
 		_instancedModels = new GameObject[maxIndex+1];
 		_instancedRenderers = new MeshRenderer[maxIndex+1];
-		for (int i = 0; i < _modelTypesToPrefabs.Length; i++) {
-			_prefabsForModels[(int)_modelTypesToPrefabs[i].ModelType] = _modelTypesToPrefabs[i].Prefab;
+		if (_prefabsForModels == null) {
+			_prefabsForModels = new GameObject[maxIndex+1];
+			for (int i = 0; i < _modelTypesToPrefabs.Length; i++) {
+				_prefabsForModels[(int)_modelTypesToPrefabs[i].ModelType] = _modelTypesToPrefabs[i].Prefab;
+			}
 		}
 	}
 
@@ -43,7 +45,7 @@ public class Model : MonoBehaviour {
 				_model.SetActive(false);
 			}
 			_modelType = modelType;
-			if (_instancedModels[(int)modelType] == null) {
+			if (_instancedModels[(int)modelType] == null && modelType != ModelType.None) {
 				_model = Instantiate(PrefabForModelType(modelType), Vector3.zero, Quaternion.identity) as GameObject;
 				_model.transform.SetParent(transform, worldPositionStays: false);
 				_instancedModels[(int)modelType] = _model;
@@ -52,7 +54,9 @@ public class Model : MonoBehaviour {
 			} else {
 				_model = _instancedModels[(int)modelType];
 				_meshRenderer = _instancedRenderers[(int)modelType];
-				_model.SetActive(true);
+				if (_model != null) {
+					_model.SetActive(true);
+				}
 			}
 		}
 		if (visible) {

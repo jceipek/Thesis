@@ -9,7 +9,22 @@ public enum MessageType {
   PositionRotationScaleVisibleTintModel = 0X03,
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
-  SimulationTime = 0X06
+  SimulationTime = 0X06,
+  ControllerAttachment = 0X07
+}
+
+public struct ControllerAttachmentTypes {
+	public ControllerAttachmentType a;
+	public ControllerAttachmentType b;
+	public ControllerAttachmentTypes (ControllerAttachmentType a, ControllerAttachmentType b) {
+		this.a = a;
+		this.b = b;
+	}
+}
+public enum ControllerAttachmentType {
+  None = 0X00,
+  Grab = 0X01,
+  Delete = 0X02
 }
 
 public enum ModelType {
@@ -51,10 +66,19 @@ public struct NetMessage {
 	public Color32 Color;
 	public Vector3 Destination;
 	public float Time;
+	public ControllerAttachmentTypes ControllerAttachments;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
   		return res;
+  	}
+
+  	static ControllerAttachmentTypes ControllerAttachmentTypesFromBuff (byte[] data, ref int offset) {
+  		ControllerAttachmentType res0 = (ControllerAttachmentType)data[offset];
+  		offset += 1;
+  		ControllerAttachmentType res1 = (ControllerAttachmentType)data[offset];
+  		offset += 1;
+  		return new ControllerAttachmentTypes(res0, res1);
   	}
 
   	static ModelType ModelTypeFromBuff (byte[] data, ref int offset) {
@@ -175,6 +199,12 @@ public struct NetMessage {
 		                        Time = FloatFromBuff(data, ref offset) };
 	}
 
+	private static NetMessage DecodeControllerAttachment (byte[] data, ref int offset) {
+		return new NetMessage { MessageType = MessageType.ControllerAttachment,
+		                        SequenceNumber = Int32FromBuff(data, ref offset),
+		                        ControllerAttachments = ControllerAttachmentTypesFromBuff(data, ref offset) };
+	}
+
 	public static bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
 		if (messageLength > 0) {
 			int offset = 0;
@@ -219,6 +249,12 @@ public struct NetMessage {
   				case MessageType.SimulationTime:
   					if (messageLength == 9) {
   						decodedMessage = DecodeSimulationTime(buffer, ref offset);
+  						return true;
+  					}
+  					break;
+  				case MessageType.ControllerAttachment:
+  					if (messageLength == 7) {
+  						decodedMessage = DecodeControllerAttachment(buffer, ref offset);
   						return true;
   					}
   					break;

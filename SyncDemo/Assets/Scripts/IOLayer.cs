@@ -16,9 +16,9 @@ public class IOLayer : MonoBehaviour {
 
     [SerializeField] SteamVR_TrackedObject _headsetTrackedObject;
     TrackedObjectInfo _headsetData = new TrackedObjectInfo();
-    [SerializeField] SteamVR_TrackedObject _controller0TrackedObject;
+    [SerializeField] ControllerManager _controller0Manager;
     ControllerInfo _controller0Data = new ControllerInfo();
-    [SerializeField] SteamVR_TrackedObject _controller1TrackedObject;
+    [SerializeField] ControllerManager _controller1Manager;
     ControllerInfo _controller1Data = new ControllerInfo();
 
 
@@ -51,12 +51,20 @@ public class IOLayer : MonoBehaviour {
             case MessageType.SimulationTime:
                 ProcessSimulationTimeMessage(message);
                 break;
+            case MessageType.ControllerAttachment:
+                ProcessControllerAttachmentMessage(message);
+                break;
         }
     }
 
     public static float _simulationTime; 
     void ProcessSimulationTimeMessage (NetMessage message) {
         _simulationTime = message.Time;
+    }
+
+    void ProcessControllerAttachmentMessage (NetMessage message) {
+        _controller0Manager.UpdateControllerAttachment(message.ControllerAttachments.a);
+        _controller1Manager.UpdateControllerAttachment(message.ControllerAttachments.b);
     }
 
     void ProcessPositionMessage (NetMessage message) {
@@ -128,8 +136,8 @@ public class IOLayer : MonoBehaviour {
     private void OnNewPoses(params object[] args) {
         var poses = (TrackedDevicePose_t[])args[0];
         UpdateDataForTrackedObject (_headsetTrackedObject, poses, _headsetData);
-        UpdateDataForTrackedObject (_controller0TrackedObject, poses, _controller0Data);
-        UpdateDataForTrackedObject (_controller1TrackedObject, poses, _controller1Data);
+        UpdateDataForTrackedObject (_controller0Manager.TrackedObject, poses, _controller0Data);
+        UpdateDataForTrackedObject (_controller1Manager.TrackedObject, poses, _controller1Data);
 
         NetManager.G.SendInputData(_headsetData.position, _headsetData.rotation,
                                    _controller0Data.position, _controller0Data.rotation, _controller0Data.grabbed, _controller0Data.action0,
