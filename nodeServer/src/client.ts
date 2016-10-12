@@ -1,4 +1,4 @@
-import { MESSAGE_TYPE, MODEL_TYPE } from './protocol'
+import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE } from './protocol'
 import * as Protocol from './protocol'
 import * as FS from 'fs'
 import * as Promise from 'bluebird'
@@ -242,6 +242,8 @@ interface IController {
 
   pickedUpObjectPos: IVector3;
   pickedUpObjectRot: IVector3;
+
+  attachment: CONTROLLER_ATTACHMENT_TYPE;
 }
 
 interface IInputData {
@@ -261,7 +263,8 @@ function makeController () : IController {
          , pickedUpObjectRotOffset: Quat.create()
          , pickedUpObjectPos: Vec3.create()
          , pickedUpObjectRot: Quat.create()
-         , id: _latestEntityId++ };
+         , id: _latestEntityId++
+         , attachment: CONTROLLER_ATTACHMENT_TYPE.GRAB };
 }
 
 function makeHeadset () : IHeadset {
