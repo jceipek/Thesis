@@ -127,15 +127,15 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
   const scale = Vec3.mul(/*out*/Vec3.create()
                         , entity.scale, offsetscale);
   const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                   , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                   , _currSeqId
-                                                                                   , entity.id
-                                                                                   , entity.type
-                                                                                   , pos
-                                                                                   , rot
-                                                                                   , scale
-                                                                                   , entity.visible
-                                                                                   , entity.tint);
+                                                                                       , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                       , _currSeqId
+                                                                                       , entity.id
+                                                                                       , entity.type
+                                                                                       , pos
+                                                                                       , rot
+                                                                                       , scale
+                                                                                       , entity.visible
+                                                                                       , entity.tint);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
     Promise.each(entity.children.entities, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
@@ -1094,6 +1094,10 @@ function doProcessControllerInput () : IAction[] {
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
 
+let _finishedSending : boolean = true;
+let _framesDroppedPerSecond = 0;
+let _frameCounter = 0;
+
 NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
   _interval = setInterval(() => {
@@ -1140,45 +1144,61 @@ NETWORK.bind(undefined, undefined, () => {
     }
 
 
-    // TRANSFER STATE
-    sendSimulationTimePromise(STATE.simulationTime).then(() => {
-      Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
-        Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
+    if (!_finishedSending) {
+      _framesDroppedPerSecond++;      
+    } else {
+      // TRANSFER STATE
+      _finishedSending = false;
+      sendSimulationTimePromise(STATE.simulationTime).then(() => {
+        Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
+          Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
 
-          // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
-          Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities.entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
-        // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-          let avatarStuffToSend = [];
-          let controllerAttachmentDataToSend = [];
-          for (let remoteClient of STATE.inputData.keys()) {
-            for (let [client, inputData] of STATE.inputData) {
-              if (remoteClient !== client) {
-                avatarStuffToSend.push({destination: remoteClient, data: inputData})
-              } else {
-                controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
+            // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
+            Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities.entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
+          // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            let avatarStuffToSend = [];
+            let controllerAttachmentDataToSend = [];
+            for (let remoteClient of STATE.inputData.keys()) {
+              for (let [client, inputData] of STATE.inputData) {
+                if (remoteClient !== client) {
+                  avatarStuffToSend.push({destination: remoteClient, data: inputData})
+                } else {
+                  controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
+                }
+                avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
               }
-              avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
             }
-          }
 
 
-          Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
-            Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
-              let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
+              Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
+                let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+
+                _finishedSending = true;
+              });
             });
-          });
 
 
-          // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-          //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-          // });
+            // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
+            //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            // });
 
-          // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+            // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
 
+            });
           });
         });
       });
-    });
+    }
+
+    _frameCounter++;
+    if (_frameCounter > FPS) {
+      if (_framesDroppedPerSecond > 0) {
+        console.log(`${_framesDroppedPerSecond} frames dropped per second!`);
+        _framesDroppedPerSecond = 0;
+      }
+      _frameCounter = 0;
+    }
 
     STATE.globalTime += 1/FPS;
   }, 1000/FPS);
