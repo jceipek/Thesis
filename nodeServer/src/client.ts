@@ -149,6 +149,13 @@ function sendModel (model : IEntity, callback : () => (err: any, bytes: number) 
   sendEntityData(NULL_VECTOR3, NULL_QUAT, UNIT_VECTOR3, model, callback);
 }
 
+function sendEntityList (entityList : IEntityList, callback : () => (err: any, bytes: number) => void) {
+  // TODO(JULIAN): Implement scale for entity lists and use it here
+  Promise.each(entityList.entities, (entity) => { return sendModelDataPromise(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity); }).then(() => {
+    callback();
+  });
+}
+
 function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
@@ -175,6 +182,7 @@ function sendAttachment (destination: string, controllers : IController[], callb
 
 const sendModelPromise = Promise.promisify(sendModel);
 const sendModelDataPromise = Promise.promisify(sendEntityData);
+const sendEntityListPromise = Promise.promisify(sendEntityList);
 const sendSegmentPromise = Promise.promisify(sendSegment);
 const sendAvatarInfoPromise = Promise.promisify(sendAvatarInfo);
 const sendSimulationTimePromise = Promise.promisify(sendSimulationTime);
@@ -447,7 +455,7 @@ function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : 
   for (let cond of conditions) {
     switch (cond.type) {
       case CONDITION_TYPE.PRESENT:
-        entitiesList.entities.push(makeEntity( Vec3.add(Vec3.create(), Vec3.fromValues(0,0.9+(offset+=0.3),0), STATE.oven.model.pos)
+        entitiesList.entities.push(makeEntity( Vec3.fromValues(0,0.9+(offset+=0.3),0)
                                              , Quat.create()
                                              , Vec3.clone(UNIT_VECTOR3)
                                              , new Uint8Array([0xFF,0x00,0x00,0xEE])
@@ -958,11 +966,17 @@ function doProcessOvenInput () {
     if (ruleIndex < 0) {
       // rule for this condition doesn't exist yet, so we need to make it
       ruleIndex = STATE.oven.rules.push(makeEmptyRuleForConditions(STATE, conditions)) - 1;
+      console.log("MADE OVEN RULE");
     }
     STATE.oven.currRule = STATE.oven.rules[ruleIndex];
-    if (STATE.oven.currRule != STATE.oven.lastRule) {
+    if (STATE.oven.currRule !== STATE.oven.lastRule) {
       // We switched to a different rule!
       STATE.oven.actionIndex = STATE.oven.currRule.actions.length - 1;
+      console.log("Switched to a different rule");
+      showEntities(STATE.oven.currRule.entities);
+      if (STATE.oven.lastRule !== null) {
+        hideEntities(STATE.oven.lastRule.entities);
+      }
     }
 
     // TODO(JULIAN): Implement actions!
@@ -973,6 +987,10 @@ function doProcessOvenInput () {
     // We're not working on any rules
     STATE.oven.currRule = null;
     STATE.oven.actionIndex = -1;
+
+    if (STATE.oven.lastRule !== null) {
+      hideEntities(STATE.oven.lastRule.entities);
+    }
   }
 
   for (let type of buttonTypes) {
@@ -981,19 +999,19 @@ function doProcessOvenInput () {
   }
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
-  if (cancelState.curr === 1 && cancelState.last === 0) {
+  if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
     // TODO(JULIAN): Delete all actions on this rule
   }
 
   const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
-  if (stepBackState.curr === 1 && stepBackState.last === 0) {
+  if (stepBackState.curr === 1 && stepBackState.last === 0 && STATE.oven.currRule !== null) {
     if (STATE.oven.actionIndex - 1 >= -1 && STATE.oven.actionIndex - 1 < STATE.oven.currRule.actions.length) {
       STATE.oven.actionIndex--;
     }
   }
 
   const stepForwardState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON); 
-  if (stepForwardState.curr === 1 && stepForwardState.last === 0) {
+  if (stepForwardState.curr === 1 && stepForwardState.last === 0 && STATE.oven.currRule !== null) {
     if (STATE.oven.actionIndex + 1 >= -1 && STATE.oven.actionIndex + 1 < STATE.oven.currRule.actions.length) {
       STATE.oven.actionIndex++;
     }
@@ -1055,6 +1073,18 @@ function alterationThatUsesController (controller : IController, alterations : I
   return null;
 }
 
+function hideEntities (entityList : IEntityList) {
+  for (let entity of entityList.entities) {
+    entity.visible = false;
+  }
+}
+
+function showEntities (entityList : IEntityList) {
+  for (let entity of entityList.entities) {
+    entity.visible = true;
+  }
+}
+
 function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]) : IAlteration[] {
   const matchingAlterations = [];
   for (let alteration of alterations) {
@@ -1102,6 +1132,9 @@ function doProcessControllerInput () : IAction[] {
 
               switch (controller.attachment) {
                 case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+                  if (sourceList === ovenEntities) {
+                    console.log("MAKING OVEN ALTERATION");
+                  }
                   if (sourceList === shelfEntities) {
                     closestEntity = cloneEntity(closestEntity);
                     applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
@@ -1188,10 +1221,12 @@ NETWORK.bind(undefined, undefined, () => {
 
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
-    doProcessControllerInput();
     doProcessClockInput();
-    // doProcessOvenInput();
-    // doProcessControllerInput(STATE.entities, false);
+    doProcessOvenInput();
+    const newOvenActions = doProcessControllerInput();
+    if (STATE.oven.currRule != null) {
+      STATE.oven.currRule.actions.push(...newOvenActions);
+    }
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
       const entities = STATE.entities;
@@ -1231,10 +1266,8 @@ NETWORK.bind(undefined, undefined, () => {
       sendSimulationTimePromise(STATE.simulationTime).then(() => {
         Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
           Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
-
-            // FIXME(JULIAN) XXX(JULIAN): This only supports one rule!!!
-            Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities.entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
-          // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            // XXX(JULIAN): Optimize this so we don't send everything all the time!
+            Promise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
             let avatarStuffToSend = [];
             let controllerAttachmentDataToSend = [];
             for (let remoteClient of STATE.inputData.keys()) {
@@ -1248,7 +1281,6 @@ NETWORK.bind(undefined, undefined, () => {
               }
             }
 
-
             Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
               Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
                 let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
@@ -1257,13 +1289,11 @@ NETWORK.bind(undefined, undefined, () => {
               });
             });
 
-
             // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
             //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
             // });
 
             // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
-
             });
           });
         });
