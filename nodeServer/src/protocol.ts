@@ -91,9 +91,6 @@ export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offse
 }
 
 export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor) {
-  if (messageType != MESSAGE_TYPE.PositionRotationScaleVisibleTintModel) {
-    console.log("SENDING INVALID MESSAGE!!! in fillBufferWithPositionRotationScaleVisibleTintModelMsg");
-  }
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
@@ -162,9 +159,6 @@ export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, 
 }
 
 export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, controllerAttachments : CONTROLLER_ATTACHMENT_TYPES) {
-  if (messageType != MESSAGE_TYPE.ControllerAttachment) {
-    console.log("SENDING INVALID MESSAGE!!! in fillBufferWithControllerAttachmentMsg");
-  }
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeInt8(controllerAttachments[0], offset, true);
