@@ -20,6 +20,7 @@ interface IEntity {
 
   interactionVolume: IInteractionVolume;
   children: IEntityList;
+  deleted: boolean;
 }
 
 interface ISegment {
@@ -134,7 +135,7 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
                                                                                        , pos
                                                                                        , rot
                                                                                        , scale
-                                                                                       , entity.visible
+                                                                                       , entity.visible && !entity.deleted 
                                                                                        , entity.tint);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
@@ -190,6 +191,7 @@ function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IC
   , visible: true
   , children: makeEntityList(pos, rot)
   , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
+  , deleted: false
   };
 }
 
@@ -211,6 +213,7 @@ function cloneEntity (entity : IEntity) : IEntity {
   , children: children
   , tint: new Uint8Array(entity.tint)
   , interactionVolume: entity.interactionVolume
+  , deleted: entity.deleted
   };
 }
 
@@ -235,6 +238,7 @@ function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEnti
   , tint: new Uint8Array([0xFF,0xFF,0xFF,0xFF])
   , interactionVolume: null
   , children: makeEntityList(pos, rot)
+  , deleted: false
   };
 }
 
@@ -282,7 +286,7 @@ interface IInputData {
   controllers: IController[];
 }
 
-function makeController () : IController {
+function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : IController {
   return { pos: Vec3.create()
          , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
          , rot: Quat.create()
@@ -296,7 +300,7 @@ function makeController () : IController {
          , pickedUpObjectRot: Quat.create()
          , id: _latestEntityId++
          , attachmentId: _latestEntityId++
-         , attachment: CONTROLLER_ATTACHMENT_TYPE.GRAB };
+         , attachment: startingAttachment };
 }
 
 function makeHeadset () : IHeadset {
@@ -378,13 +382,41 @@ interface IAction {
   type: ACTION_TYPE;
 }
 
-interface IMoveByAction extends IAction {
+interface IActionMoveBy extends IAction {
+  entity: IEntity;
   posOffset: IVector3;
   rotOffset: IQuaternion;
 }
 
-function makeMoveByAction (posOffset : IVector3, rotOffset : IQuaternion) : IAction {
-  return <IMoveByAction>{ type: ACTION_TYPE.MOVE_BY, posOffset: posOffset, rotOffset: rotOffset };
+interface IActionDelete extends IAction {
+  entity: IEntity;
+}
+
+function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) : IActionDelete {
+  return { type: ACTION_TYPE.DELETE
+         , entity: deleteAlteration.entity};
+}
+
+function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IActionMoveBy {
+  // NOTE(JULIAN): Strictly speaking, we might imagine that we need to incorporate the controller metadata offsets
+  // However, since the start and end are offset equally, I think we can ignore them and still obtain the same delta
+  let endPos = moveAlteration.controllerMetadata.controller.pos;
+  let endRot = moveAlteration.controllerMetadata.controller.rot;
+
+  let startPos = moveAlteration.controllerMetadata.startPos;
+  let startRot = moveAlteration.controllerMetadata.startRot;
+
+  const deltaPos = Vec3.create(); 
+  const deltaRot = Quat.create();
+  Vec3.sub(/*out*/deltaPos, endPos, startPos);
+  Quat.invert(/*out*/deltaRot, startRot);
+  Vec3.transformQuat(/*out*/deltaPos, deltaPos, deltaRot);
+  Quat.mul(/*out*/deltaRot, endRot, deltaRot);
+
+  return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
+                        , entity: moveAlteration.entity
+                        , posOffset: deltaPos
+                        , rotOffset: deltaRot };
 }
 
 interface IRule {
@@ -561,6 +593,7 @@ const enum ALTERATION_TYPE {
 
 interface IAlteration {
   type: ALTERATION_TYPE;
+  valid: boolean;
   entitiesList: IEntityList;
 }
 
@@ -607,6 +640,17 @@ function makeControllerMetadataFromEntityAndController (entity : IEntity, contro
 function makeMoveAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationMove {
   return {
     type: ALTERATION_TYPE.MOVE
+  , valid: true
+  , entitiesList: entitiesList
+  , entity: entity
+  , controllerMetadata: makeControllerMetadataFromEntityAndController(entity, controller)
+  };
+}
+
+function makeDeleteAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationMove {
+  return {
+    type: ALTERATION_TYPE.DELETE
+  , valid: true
   , entitiesList: entitiesList
   , entity: entity
   , controllerMetadata: makeControllerMetadataFromEntityAndController(entity, controller)
@@ -649,7 +693,7 @@ function restoreEntitiesFromStoredEntities (state : IState) {
   }
   for (let entity of state.entities.entities) {
     if (oldEntityIds.has(entity.id)) {
-      entity.visible = false; // XXX(JULIAN): Would be better to actually delete the entity... 
+      entity.deleted = true; // XXX(JULIAN): Would be better to actually delete the entity?
       state.storedEntities.entities.push(entity);
     }
   }
@@ -742,7 +786,7 @@ function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVecto
   let sqrDistance = Infinity;
   for (let entityList of entityLists) {
     for (let entity of entityList.entities) {
-      if (entity === null) {
+      if (entity === null || !entity.visible || entity.deleted) {
         continue;
       }
       Vec3.add(/*out*/_tempVec
@@ -975,7 +1019,7 @@ function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
 function performActionOnEntity (action : IAction, entity : IEntity) {
   switch (action.type) {
     case ACTION_TYPE.MOVE_BY:
-      Vec3.add(entity.pos, entity.pos, (<IMoveByAction>action).posOffset);
+      Vec3.add(entity.pos, entity.pos, (<IActionMoveBy>action).posOffset);
       // Vec3.add(entity.rot, entity.rot, (<IMoveByAction>action).rotOffset);
       break;
     case ACTION_TYPE.DELETE:
@@ -1011,16 +1055,33 @@ function alterationThatUsesController (controller : IController, alterations : I
   return null;
 }
 
+function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]) : IAlteration[] {
+  const matchingAlterations = [];
+  for (let alteration of alterations) {
+    switch (alteration.type) {
+      case ALTERATION_TYPE.MOVE:
+        if ((<IAlterationMove>alteration).entity === entity) {
+          matchingAlterations.push(alteration);
+        }
+        break;
+      case ALTERATION_TYPE.DELETE:
+        if ((<IAlterationDelete>alteration).entity === entity) {
+          matchingAlterations.push(alteration);
+        }
+        break;
+    }
+  }
+  return matchingAlterations;
+}
+
 function doProcessControllerInput () : IAction[] {
-  const newActions : IAction[] = [];
+  const newOvenActions : IAction[] = [];
   const newInProgressAlterations : IAlteration[] = [];
 
   let worldEntities = STATE.entities;
   let ovenEntities = STATE.oven.currRule === null? makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot) : STATE.oven.currRule.entities;
   let shelfEntities = STATE.shelf.clonableModels;
   const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
-  // STATE.inProgressAlterations
-
 
   for (let [client, inputData] of STATE.inputData) {
     let controllers = inputData.controllers;
@@ -1031,22 +1092,34 @@ function doProcessControllerInput () : IAction[] {
         if (didControllerJustGrab(controller)) {
           let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
           if (closestEntity !== null) {
-            // TODO(JULIAN): If the entity already exists in another alteration, need to replace that alteration or modify it or delete it
-
-            // TODO(JULIAN): Handle Delete Alterations as well as move; based on the controller tip
             if (doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
-              if (sourceList === shelfEntities) {
-                closestEntity = cloneEntity(closestEntity);
-                applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
-                sourceList = worldEntities;
-                worldEntities.entities.push(closestEntity);
-              }
               
-              newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, sourceList));
+              // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
+              const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
+              for (let alt of alterationsUsingClosestEntity) {
+                alt.valid = false;
+              }
+
+              switch (controller.attachment) {
+                case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+                  if (sourceList === shelfEntities) {
+                    closestEntity = cloneEntity(closestEntity);
+                    applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
+                    sourceList = worldEntities;
+                    worldEntities.entities.push(closestEntity);
+                  }
+                  newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, sourceList));
+                  break;
+                case CONTROLLER_ATTACHMENT_TYPE.DELETE:
+                  if (sourceList !== shelfEntities) {
+                    newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
+                  }
+                  break;
+              }
             }
           }
         }
-      } else {
+      } else if (usedAlteration.valid) {
         // Process if controller already used!
         switch (usedAlteration.type) {
           case ALTERATION_TYPE.MOVE:
@@ -1061,16 +1134,22 @@ function doProcessControllerInput () : IAction[] {
             
             if (didControllerJustRelease(controller)) {
               // DELETE this alteration; make a new action for it...
+              if (usedAlteration.entitiesList === ovenEntities) {
+                newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration));
+              }
             } else {
               newInProgressAlterations.push(usedAlteration);
             }
           break;
           case ALTERATION_TYPE.DELETE:
-            // (<IAlterationDelete>usedAlteration)
-
+            const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
+            entityToDelete.deleted = true;
+            // DELETE this alteration; make a new action for it...
+            if (usedAlteration.entitiesList === ovenEntities) {
+              newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
+            }
           break;
         } 
-        
       }
     }
   }
@@ -1087,7 +1166,7 @@ function doProcessControllerInput () : IAction[] {
   STATE.inProgressAlterations.length = 0;
   STATE.inProgressAlterations.push(...newInProgressAlterations);
 
-  return newActions; 
+  return newOvenActions; 
 }
 
 
@@ -1109,10 +1188,10 @@ NETWORK.bind(undefined, undefined, () => {
 
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
-    // doProcessClockInput();
+    doProcessControllerInput();
+    doProcessClockInput();
     // doProcessOvenInput();
     // doProcessControllerInput(STATE.entities, false);
-    doProcessControllerInput();
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
       const entities = STATE.entities;
@@ -1131,7 +1210,7 @@ NETWORK.bind(undefined, undefined, () => {
             console.log(`ACTION COUNT: ${rule.actions.length}`)
             for (let action of rule.actions) {
               performActionOnEntity(action, entity);
-              console.log(`DOING: posOffset ${(<IMoveByAction>action).posOffset}`);
+              console.log(`DOING: posOffset ${(<IActionMoveBy>action).posOffset}`);
             }
           }
         }
@@ -1216,8 +1295,8 @@ NETWORK.on('message', (message : Buffer, remote) => {
   if (!inputData.has(client)) {
     console.log(`${client} connected!`);
     inputData.set(client, { headset: makeHeadset()
-                          , controllers: [ makeController()
-                                         , makeController() ]});
+                          , controllers: [ makeController(CONTROLLER_ATTACHMENT_TYPE.DELETE)
+                                         , makeController(CONTROLLER_ATTACHMENT_TYPE.GRAB) ]});
   }
 
   // inputData.get(client)[0].grab.last = inputData.get(client)[0].grab.curr;
