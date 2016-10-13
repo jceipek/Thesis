@@ -994,7 +994,7 @@ function doProcessOvenInput () {
 
   const entities = STATE.entities;
   for (let entity of entities.entities) {
-    if (doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
+    if ((!entity.deleted && entity.visible) && doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
                         , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
         objectsInOven.push(entity);
     }
@@ -1045,7 +1045,9 @@ function doProcessOvenInput () {
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
-    // TODO(JULIAN): Delete all actions on this rule
+    // TODO(JULIAN): Undo all of the entity transformations
+    STATE.oven.currRule.actions.length = 0;
+    STATE.oven.actionIndex = -1;
   }
 
   const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
@@ -1086,7 +1088,7 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
       Quat.mul(entity.rot, entity.rot, (<IActionMoveBy>action).rotOffset);
       break;
     case ACTION_TYPE.DELETE:
-      console.error("TODO(JULIAN): Implement 'Delete' action");
+      entity.deleted = true;
       break;
   }
 }
@@ -1275,6 +1277,7 @@ NETWORK.bind(undefined, undefined, () => {
     const newOvenActions = doProcessControllerInput();
     if (STATE.oven.currRule != null) {
       STATE.oven.currRule.actions.push(...newOvenActions);
+      STATE.oven.actionIndex += newOvenActions.length;
     }
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
