@@ -49,7 +49,8 @@ public enum ModelType {
   Sphere = 0X12,
   Cylinder = 0X13,
   Shelf = 0X14,
-  Pedestal = 0X15
+  Pedestal = 0X15,
+  ControllerAttachment_Pliers = 0X16
 }
 
 public struct NetMessage {

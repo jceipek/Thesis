@@ -84,6 +84,12 @@ let _currSeqId = 0;
 
 const BASE_COLOR = new Uint8Array([0xFF,0xFF,0xFF,0xFF]);
 
+
+const ATTACHMENT_TYPE_TO_MODEL = {};
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;
+
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
   const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR);
   _currSeqId++;
@@ -93,9 +99,21 @@ function sendAvatarInfo (destination: string, inputData : IInputData, callback :
   let controller1 = inputData.controllers[1];
   sendTarget(_sendBuffer, messageLength, host, port, () => {
     const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR);
+    _currSeqId++;
     sendTarget(_sendBuffer, messageLength, host, port, () => {
       const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR);
-      sendTarget(_sendBuffer, messageLength, host, port, callback);
+      _currSeqId++;
+      sendTarget(_sendBuffer, messageLength, host, port, () => {
+        const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3,
+         true, BASE_COLOR);
+         _currSeqId++;
+        sendTarget(_sendBuffer, messageLength, host, port, () => {
+          const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3,
+          true, BASE_COLOR);
+          _currSeqId++;
+          sendTarget(_sendBuffer, messageLength, host, port, callback);
+        });
+      });
     });
   });
 }
@@ -142,12 +160,24 @@ function sendSimulationTime (time : number, callback : () => (err: any, bytes: n
   sendBroadcast(_sendBuffer, messageLength, callback);
 }
 
+const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
+function sendAttachment (destination: string, controllers : IController[], callback : () => (err: any, bytes: number) => void) {
+  const [host, portString] = destination.split(':');
+  const port = parseInt(portString, 10);
+  _controllerAttachmentsBuffer[0] = controllers[0].attachment;
+  _controllerAttachmentsBuffer[1] = controllers[1].attachment;
+  const messageLength = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, 0, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
+  _currSeqId++;
+  sendTarget(_sendBuffer, messageLength, host, port, callback);
+}
+
 
 const sendModelPromise = Promise.promisify(sendModel);
 const sendModelDataPromise = Promise.promisify(sendEntityData);
 const sendSegmentPromise = Promise.promisify(sendSegment);
 const sendAvatarInfoPromise = Promise.promisify(sendAvatarInfo);
 const sendSimulationTimePromise = Promise.promisify(sendSimulationTime);
+const sendAttachmentPromise = Promise.promisify(sendAttachment);
 
 function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
@@ -230,6 +260,7 @@ interface IHeadset {
 
 interface IController {
   id : number;
+  attachmentId : number;
   pos : IVector3;
   interactionVolume: IInteractionVolume;
   rot: IQuaternion;
@@ -264,6 +295,7 @@ function makeController () : IController {
          , pickedUpObjectPos: Vec3.create()
          , pickedUpObjectRot: Quat.create()
          , id: _latestEntityId++
+         , attachmentId: _latestEntityId++
          , attachment: CONTROLLER_ATTACHMENT_TYPE.GRAB };
 }
 
@@ -1117,10 +1149,13 @@ NETWORK.bind(undefined, undefined, () => {
           Promise.each(STATE.oven.rules.length > 0? STATE.oven.rules[0].entities.entities : [], (entity) => { return sendModelPromise(entity); }).then(() => {
         // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
           let avatarStuffToSend = [];
+          let controllerAttachmentDataToSend = [];
           for (let remoteClient of STATE.inputData.keys()) {
             for (let [client, inputData] of STATE.inputData) {
               if (remoteClient !== client) {
                 avatarStuffToSend.push({destination: remoteClient, data: inputData})
+              } else {
+                controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
               }
               avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
             }
@@ -1128,7 +1163,9 @@ NETWORK.bind(undefined, undefined, () => {
 
 
           Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
-            let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
+              let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+            });
           });
 
 

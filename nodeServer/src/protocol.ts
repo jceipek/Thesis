@@ -44,7 +44,8 @@ export const enum MODEL_TYPE {
   SPHERE = 0X12,
   CYLINDER = 0X13,
   SHELF = 0X14,
-  PEDESTAL = 0X15
+  PEDESTAL = 0X15,
+  CONTROLLER_ATTACHMENT_PLIERS = 0X16
 }
 
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {

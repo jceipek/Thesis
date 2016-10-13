@@ -84,6 +84,9 @@ const MODEL_TYPES = [
 // SHELF
 , {cs: 'Shelf', js: 'SHELF'}
 , {cs: 'Pedestal', js: 'PEDESTAL'}
+
+// MORE CONTROLLER STUFF
+, {cs: 'ControllerAttachment_Pliers', js: 'CONTROLLER_ATTACHMENT_PLIERS'}
 ]
 
 const MESSAGES : IMessage[] = [

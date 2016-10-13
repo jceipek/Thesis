@@ -52,7 +52,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1 &147176
 GameObject:
   m_ObjectHideFlags: 1
@@ -1707,7 +1707,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _controllerTrackedObject: {fileID: 11411726}
-  _controllerAttachmentTypeToPrefabs: []
+  _controllerAttachmentTypeToPrefabs:
+  - ControllerAttachmentType: 0
+    Prefab: {fileID: 0}
+  - ControllerAttachmentType: 1
+    Prefab: {fileID: 1000010293930918, guid: 867a60dddd1c74e33a4b172862abdcb8, type: 2}
+  - ControllerAttachmentType: 2
+    Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
 --- !u!114 &114000011516958070
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -1720,4 +1726,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _controllerTrackedObject: {fileID: 11463128}
-  _controllerAttachmentTypeToPrefabs: []
+  _controllerAttachmentTypeToPrefabs:
+  - ControllerAttachmentType: 0
+    Prefab: {fileID: 0}
+  - ControllerAttachmentType: 1
+    Prefab: {fileID: 1000010293930918, guid: 867a60dddd1c74e33a4b172862abdcb8, type: 2}
+  - ControllerAttachmentType: 2
+    Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
