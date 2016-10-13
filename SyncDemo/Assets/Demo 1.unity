@@ -212,6 +212,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 2
+--- !u!114 &368433529 stripped
+MonoBehaviour:
+  m_PrefabParentObject: {fileID: 114000011516958070, guid: 4d293c8e162f3874b982baadd71153d2,
+    type: 2}
+  m_PrefabInternal: {fileID: 1132538140}
+  m_Script: {fileID: 11500000, guid: 69f302e0fa2ae4cc8bc6cc0ac206a82f, type: 3}
+--- !u!114 &694950368 stripped
+MonoBehaviour:
+  m_PrefabParentObject: {fileID: 114000011219833236, guid: 4d293c8e162f3874b982baadd71153d2,
+    type: 2}
+  m_PrefabInternal: {fileID: 1132538140}
+  m_Script: {fileID: 11500000, guid: 69f302e0fa2ae4cc8bc6cc0ac206a82f, type: 3}
 --- !u!21 &1112087428
 Material:
   serializedVersion: 6
@@ -392,8 +404,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _headsetTrackedObject: {fileID: 1284133709}
-  _controller0Manager: {fileID: 0}
-  _controller1Manager: {fileID: 0}
+  _controller0Manager: {fileID: 694950368}
+  _controller1Manager: {fileID: 368433529}
   _objectPrefab: {fileID: 140796, guid: 9e8506e4d99c846859a7da34f86ddf4a, type: 2}
   _lineSegmentPrefab: {fileID: 1000013940278896, guid: e52779be1471647ddacb88fd0287bfdd,
     type: 2}
