@@ -118,7 +118,11 @@ public class NetManager : MonoBehaviour {
                     // mostRecentNum = message.SequenceNumber;
                 // }
             } else if (dataLength > 0) {
-                Debug.Log("Undecodable");
+                Debug.LogFormat("Encountered {0} undecodable bits...", dataLength);
+                for (int i = 0; i < dataLength; i++) {
+                    Debug.Log(_receiveBuffer[i].ToString("X2"));
+                }
+                Debug.Log("COMPLETED");
             }
         }
         Debug.Log("Stopping Read Thread");
