@@ -15,8 +15,10 @@
 		static GameObject[] _prefabsForModels;
 		GameObject[] _instancedModels;
 		GameObject _model;
-		ControllerAttachmentType _controllerAttachment = ControllerAttachmentType.None; 
-		void Awake () {
+		ControllerAttachmentType _controllerAttachment = ControllerAttachmentType.None;
+
+		bool _initialized = false; 
+		void Init () {
 			int maxIndex = -1;
 			for (int i = 0; i < _controllerAttachmentTypeToPrefabs.Length; i++) {
 				if ((int)_controllerAttachmentTypeToPrefabs[i].ControllerAttachmentType > maxIndex) {
@@ -28,6 +30,7 @@
 			for (int i = 0; i < _controllerAttachmentTypeToPrefabs.Length; i++) {
 				_prefabsForModels[(int)_controllerAttachmentTypeToPrefabs[i].ControllerAttachmentType] = _controllerAttachmentTypeToPrefabs[i].Prefab;
 			}
+			_initialized = true;
 		}
 
 		GameObject PrefabForAttachmentType (ControllerAttachmentType attachmentType) {
@@ -35,6 +38,9 @@
 		}
 
 		public void UpdateControllerAttachment (ControllerAttachmentType attachmentType) {
+			if (!_initialized) {
+				Init();
+			}
 			if (_controllerAttachment != attachmentType) {
 				if (_model != null) {
 					_model.SetActive(false);

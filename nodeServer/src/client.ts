@@ -1271,7 +1271,7 @@ NETWORK.bind(undefined, undefined, () => {
     }
 
     _frameCounter++;
-    if (_frameCounter > FPS) {
+    if (_frameCounter >= FPS) {
       if (_framesDroppedPerSecond > 0) {
         console.log(`${_framesDroppedPerSecond} frames dropped per second!`);
         _framesDroppedPerSecond = 0;
