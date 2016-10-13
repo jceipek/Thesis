@@ -226,13 +226,31 @@ function cloneEntity (entity : IEntity) : IEntity {
 }
 
 function applyOffsetToEntity (entity : IEntity, offsetPos : IVector3, offsetRot : IQuaternion) {
-  const rot = Quat.mul(/*out*/Quat.create()
-                      , offsetRot, entity.rot);
-  const pos = Vec3.add(/*out*/Vec3.create()
-                      , offsetPos, Vec3.transformQuat(/*out*/_tempVec
-                                                     , entity.pos, offsetRot));
-  Vec3.copy(entity.pos, pos);
-  Quat.copy(entity.rot, rot);
+  applyOffsetToPosRot(entity.pos, entity.rot, entity.pos, entity.rot, offsetPos, offsetRot);
+  // const rot = Quat.mul(/*out*/Quat.create()
+  //                     , offsetRot, entity.rot);
+  // const pos = Vec3.add(/*out*/Vec3.create()
+  //                     , offsetPos, Vec3.transformQuat(/*out*/_tempVec
+  //                                                    , entity.pos, offsetRot));
+  // Vec3.copy(entity.pos, pos);
+  // Quat.copy(entity.rot, rot);
+}
+
+function applyOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : IVector3, inRot : IQuaternion, offsetPos : IVector3, offsetRot : IQuaternion) {
+  Quat.mul(/*out*/outRot
+          , offsetRot, inRot);
+  Vec3.add(/*out*/outPos
+          , offsetPos, Vec3.transformQuat(/*out*/outPos
+                                         , inPos, offsetRot));
+}
+
+function applyInverseOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : IVector3, inRot : IQuaternion, offsetPos : IVector3, offsetRot : IQuaternion) {
+  Quat.mul(/*out*/outRot
+          , Quat.invert(/*out*/Quat.create(), offsetRot), inRot);
+  Vec3.sub(/*out*/outPos
+          , Vec3.transformQuat(/*out*/outPos
+                              , inPos, offsetRot)
+          , offsetPos);
 }
 
 function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEntity {
@@ -623,18 +641,44 @@ interface IAlterationDelete extends IAlteration {
   controllerMetadata : IControllerMetadata;
 }
 
-function makeControllerMetadataFromEntityAndController (entity : IEntity, controller : IController) : IControllerMetadata {
+// function makeControllerMetadataFromEntityAndController (entity : IEntity, controller : IController) : IControllerMetadata {
+//   const offsetPos : IVector3 = Vec3.create();
+//   const offsetRot : IQuaternion = Quat.create();
+//   Vec3.transformQuat(/*out*/offsetPos
+//                     , Vec3.sub(/*out*/offsetPos
+//                               , entity.pos, controller.pos)
+//                     , Quat.invert(/*out*/offsetRot
+//                                     , controller.rot));
+
+//   Quat.mul(/*out*/offsetRot
+//           , Quat.invert(/*out*/offsetRot
+//                        , controller.rot), entity.rot);
+
+//   return {
+//     controller: controller
+//   , startPos: Vec3.clone(entity.pos)
+//   , startRot: Quat.clone(entity.rot)
+//   , offsetPos: offsetPos
+//   , offsetRot: offsetRot
+//   };
+// }
+
+function makeControllerMetadataFromEntityInEntityListAndController (entity : IEntity, entitiesList : IEntityList, controller : IController) : IControllerMetadata {
+  const controllerPos = Vec3.create();
+  const controllerRot = Quat.create();
+  applyInverseOffsetToPosRot(controllerPos, controllerRot, controller.pos, controller.rot, entitiesList.offsetPos, entitiesList.offsetRot);
+  
   const offsetPos : IVector3 = Vec3.create();
   const offsetRot : IQuaternion = Quat.create();
   Vec3.transformQuat(/*out*/offsetPos
                     , Vec3.sub(/*out*/offsetPos
-                              , entity.pos, controller.pos)
+                              , entity.pos, controllerPos)
                     , Quat.invert(/*out*/offsetRot
-                                    , controller.rot));
+                                    , controllerRot));
 
   Quat.mul(/*out*/offsetRot
           , Quat.invert(/*out*/offsetRot
-                       , controller.rot), entity.rot);
+                       , controllerRot), entity.rot);
 
   return {
     controller: controller
@@ -651,7 +695,7 @@ function makeMoveAlteration (entity : IEntity, controller : IController, entitie
   , valid: true
   , entitiesList: entitiesList
   , entity: entity
-  , controllerMetadata: makeControllerMetadataFromEntityAndController(entity, controller)
+  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
   };
 }
 
@@ -661,7 +705,7 @@ function makeDeleteAlteration (entity : IEntity, controller : IController, entit
   , valid: true
   , entitiesList: entitiesList
   , entity: entity
-  , controllerMetadata: makeControllerMetadataFromEntityAndController(entity, controller)
+  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
   };
 }
 
@@ -978,11 +1022,7 @@ function doProcessOvenInput () {
         hideEntities(STATE.oven.lastRule.entities);
       }
     }
-
-    // TODO(JULIAN): Implement actions!
-    //const newActions = doProcessControllerInput(STATE.oven.rules[ruleIndex].entities, true);
-    //STATE.oven.rules[ruleIndex].actions.push(...newActions);
-
+    // NOTE(JULIAN): Action recording is handled outside of this function, which may be a bit odd
   } else {
     // We're not working on any rules
     STATE.oven.currRule = null;
@@ -1159,11 +1199,15 @@ function doProcessControllerInput () : IAction[] {
             const entityToMove = (<IAlterationMove>usedAlteration).entity;
             const controllerMetadata = (<IAlterationMove>usedAlteration).controllerMetadata;
 
-            Vec3.add(/*out*/entityToMove.pos
-                    , controller.pos, Vec3.transformQuat(/*out*/entityToMove.pos
-                                                        , controllerMetadata.offsetPos, controller.rot));
+            const controllerPos = _tempVec;
+            const controllerRot = _tempQuat;
+            applyInverseOffsetToPosRot(controllerPos, controllerRot, controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
 
-            Quat.mul(/*out*/entityToMove.rot, controller.rot, controllerMetadata.offsetRot);
+            Vec3.add(/*out*/entityToMove.pos
+                    , controllerPos, Vec3.transformQuat(/*out*/entityToMove.pos
+                                                        , controllerMetadata.offsetPos, controllerRot));
+
+            Quat.mul(/*out*/entityToMove.rot, controllerRot, controllerMetadata.offsetRot);
             
             if (didControllerJustRelease(controller)) {
               // DELETE this alteration; make a new action for it...
