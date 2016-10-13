@@ -158,7 +158,7 @@ export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, 
   return offset;
 }
 
-export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, controllerAttachments : CONTROLLER_ATTACHMENT_TYPES) {
+export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, controllerAttachments : Uint8Array) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeInt8(controllerAttachments[0], offset, true);

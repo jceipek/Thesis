@@ -24,7 +24,7 @@ var typeLengths = {
 
 const TYPE_INFO = {
   'MessageType': {js: 'MESSAGE_TYPE', cs: 'MessageType', len: 1}
-, 'ControllerAttachmentTypes': {js: 'CONTROLLER_ATTACHMENT_TYPES', cs: 'ControllerAttachmentTypes', len: 2} // XXX(JULIAN): Doesn't work for a different number than 2 controllers
+, 'ControllerAttachmentTypes': {js: 'Uint8Array', cs: 'ControllerAttachmentTypes', len: 2} // XXX(JULIAN): Doesn't work for a different number than 2 controllers
 , 'ModelType': {js: 'MODEL_TYPE', cs: 'ModelType', len: 2}
 , 'Float': {js: 'number', cs: 'float', len: 4}
 , 'Int32': {js: 'number', cs: 'int', len: 4}

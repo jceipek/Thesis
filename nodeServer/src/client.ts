@@ -370,31 +370,31 @@ interface ICondition {
   type: CONDITION_TYPE;
 }
 
-interface IPresentCondition extends ICondition {
-  objtype: MODEL_TYPE;
+interface IConditionPresent extends ICondition {
+  entity: IEntity;
 }
 
-interface IIntersectCondition extends ICondition {
-  objtypea: MODEL_TYPE;
-  objtypeb: MODEL_TYPE;
+interface IConditionIntersect extends ICondition {
+  entityA: IEntity;
+  entityB: IEntity;
 }
 
-function makePresentCondition (objtype : MODEL_TYPE) : IPresentCondition {
-  return { type: CONDITION_TYPE.PRESENT, objtype: objtype };
+function makePresentCondition (entity : IEntity) : IConditionPresent {
+  return { type: CONDITION_TYPE.PRESENT, entity: entity };
 }
 
-function makeIntersectCondition (objtypea : MODEL_TYPE, objtypeb : MODEL_TYPE) : IIntersectCondition {
-  return { type: CONDITION_TYPE.INTERSECT, objtypea: objtypea, objtypeb: objtypeb };
+function makeIntersectCondition (entityA : IEntity, entityB : IEntity) : IConditionIntersect {
+  return { type: CONDITION_TYPE.INTERSECT, entityA: entityA, entityB: entityB };
 }
 
 function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
   if (condA.type === condB.type) {
     switch (condA.type) {
       case CONDITION_TYPE.PRESENT:
-        return (<IPresentCondition>condA).objtype === (<IPresentCondition>condB).objtype;
+        return (<IConditionPresent>condA).entity.type === (<IConditionPresent>condB).entity.type;
       case CONDITION_TYPE.INTERSECT:
-        return (<IIntersectCondition>condA).objtypea === (<IIntersectCondition>condB).objtypea &&
-               (<IIntersectCondition>condA).objtypeb === (<IIntersectCondition>condB).objtypeb; 
+        return (<IConditionIntersect>condA).entityA.type === (<IConditionIntersect>condB).entityA.type &&
+               (<IConditionIntersect>condA).entityB.type === (<IConditionIntersect>condB).entityB.type; 
     }
   }
   return false;
@@ -424,13 +424,17 @@ function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) :
 }
 
 function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IActionMoveBy {
-  // NOTE(JULIAN): Strictly speaking, we might imagine that we need to incorporate the controller metadata offsets
-  // However, since the start and end are offset equally, I think we can ignore them and still obtain the same delta
-  let endPos = moveAlteration.controllerMetadata.controller.pos;
-  let endRot = moveAlteration.controllerMetadata.controller.rot;
+  let endPos = Vec3.clone(moveAlteration.controllerMetadata.controller.pos);
+  let endRot = Quat.clone(moveAlteration.controllerMetadata.controller.rot);
+  applyInverseOffsetToPosRot(endPos, endRot, endPos, endRot, moveAlteration.entitiesList.offsetPos, moveAlteration.entitiesList.offsetRot);
+  Vec3.add(/*out*/endPos
+          , endPos, Vec3.transformQuat(/*out*/Vec3.create()
+                                              , moveAlteration.controllerMetadata.offsetPos, endRot));
 
-  let startPos = moveAlteration.controllerMetadata.startPos;
-  let startRot = moveAlteration.controllerMetadata.startRot;
+  Quat.mul(/*out*/endRot, endRot, moveAlteration.controllerMetadata.offsetRot);
+
+  let startPos = moveAlteration.controllerMetadata.entityStartPos;
+  let startRot = moveAlteration.controllerMetadata.entityStartRot;
 
   const deltaPos = Vec3.create(); 
   const deltaRot = Quat.create();
@@ -472,12 +476,13 @@ function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : 
   let offset = 0;
   for (let cond of conditions) {
     switch (cond.type) {
+      // TODO(JULIAN): Handle intersection!!!
       case CONDITION_TYPE.PRESENT:
         entitiesList.entities.push(makeEntity( Vec3.fromValues(0,0.9+(offset+=0.3),0)
                                              , Quat.create()
                                              , Vec3.clone(UNIT_VECTOR3)
                                              , new Uint8Array([0xFF,0x00,0x00,0xEE])
-                                             , (<IPresentCondition>cond).objtype));
+                                             , (<IConditionPresent>cond).entity.type));
     }
   }
   return {
@@ -625,8 +630,8 @@ interface IAlteration {
 
 interface IControllerMetadata {
   controller: IController;
-  startPos: IVector3;
-  startRot: IQuaternion;
+  entityStartPos: IVector3;
+  entityStartRot: IQuaternion;
   offsetPos: IVector3;
   offsetRot: IQuaternion;
 }
@@ -682,8 +687,8 @@ function makeControllerMetadataFromEntityInEntityListAndController (entity : IEn
 
   return {
     controller: controller
-  , startPos: Vec3.clone(entity.pos)
-  , startRot: Quat.clone(entity.rot)
+  , entityStartPos: Vec3.clone(entity.pos)
+  , entityStartRot: Quat.clone(entity.rot)
   , offsetPos: offsetPos
   , offsetRot: offsetRot
   };
@@ -998,10 +1003,10 @@ function doProcessOvenInput () {
   let conditions : ICondition[] = [];
   if (objectsInOven.length > 0) {
     for (var obj of objectsInOven) {
-      conditions.push(makePresentCondition(obj.type));
+      conditions.push(makePresentCondition(obj));
       for (var obj2 of objectsInOven) {
         if (doVolumesOverlap(obj.pos, obj.interactionVolume, obj2.pos, obj2.interactionVolume)) {
-          conditions.push(makeIntersectCondition(obj.type, obj2.type));
+          conditions.push(makeIntersectCondition(obj, obj2));
         }
       } 
     }
@@ -1077,8 +1082,8 @@ function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
 function performActionOnEntity (action : IAction, entity : IEntity) {
   switch (action.type) {
     case ACTION_TYPE.MOVE_BY:
-      Vec3.add(entity.pos, entity.pos, (<IActionMoveBy>action).posOffset);
-      // Vec3.add(entity.rot, entity.rot, (<IMoveByAction>action).rotOffset);
+      Vec3.add(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, (<IActionMoveBy>action).posOffset, entity.rot));
+      Quat.mul(entity.rot, entity.rot, (<IActionMoveBy>action).rotOffset);
       break;
     case ACTION_TYPE.DELETE:
       console.error("TODO(JULIAN): Implement 'Delete' action");
@@ -1277,19 +1282,23 @@ NETWORK.bind(undefined, undefined, () => {
       for (let entity of entities.entities) {
         // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
 
-        // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply
+        // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply, mainly because we don't check intersections
         for (let rule of STATE.oven.rules) {
           let ruleApplies = true;
           for (let cond of rule.conditions) {
-            if (cond.type === CONDITION_TYPE.PRESENT && (<IPresentCondition>cond).objtype !== entity.type) {
-              ruleApplies = false;
+            switch (cond.type) {
+              case CONDITION_TYPE.PRESENT:
+                if ((<IConditionPresent>cond).entity.type !== entity.type) {
+                  ruleApplies = false;
+                }
+                break;
             }
           }
           if (ruleApplies) {
-            console.log(`ACTION COUNT: ${rule.actions.length}`)
+            // console.log(`ACTION COUNT: ${rule.actions.length}`)
             for (let action of rule.actions) {
               performActionOnEntity(action, entity);
-              console.log(`DOING: posOffset ${(<IActionMoveBy>action).posOffset}`);
+              // console.log(`DOING: posOffset ${(<IActionMoveBy>action).posOffset}`);
             }
           }
         }
