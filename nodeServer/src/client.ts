@@ -4,6 +4,8 @@ import * as FS from 'fs'
 import * as Promise from 'bluebird'
 import * as DGRAM from 'dgram'
 import { vec3 as Vec3, quat as Quat, GLM } from 'gl-matrix'
+import * as SH from './spatialHash'
+import { ISpatialHash } from './spatialHash'
 
 type IVector3 = GLM.IArray;
 type IQuaternion = GLM.IArray;
@@ -60,6 +62,8 @@ const NETWORK = DGRAM.createSocket('udp4');
 const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
 const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
 const NULL_QUAT = Quat.create();
+const _tempQuat = Quat.create();
+const _tempVec = Vec3.create();
 
 
 let _interval : null|NodeJS.Timer = null;
@@ -579,11 +583,15 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
          };
 }
 
+const CELL_SIZE = 1;
+const CELL_COUNT = 1024;
+
 function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion) : IEntityList {
   return {
     entities: []
   , offsetPos: posOffset 
   , offsetRot: rotOffset 
+  , spatialHash: SH.make<IEntity>(CELL_SIZE, CELL_COUNT)
   };
 }
 
@@ -833,8 +841,8 @@ interface IEntityList {
   entities: IEntity[];
   offsetPos: IVector3;
   offsetRot: IQuaternion;
+  spatialHash: ISpatialHash<IEntity>;
 }
-
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
 function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVector3) : [IEntity|null, IEntityList] {
@@ -842,23 +850,37 @@ function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVecto
   let closestSourceList : IEntityList = null;
   let sqrDistance = Infinity;
   for (let entityList of entityLists) {
-    for (let entity of entityList.entities) {
-      if (entity === null || !entity.visible || entity.deleted) {
-        continue;
-      }
-      Vec3.add(/*out*/_tempVec
-              , entityList.offsetPos
-              , Vec3.transformQuat(/*out*/_tempVec
-                                  , entity.pos, entityList.offsetRot));
-      let currSqrDist = Vec3.sqrDist(_tempVec, pt);
-      if (currSqrDist < sqrDistance) {
-        sqrDistance = currSqrDist; 
-        closest = entity;
-        closestSourceList = entityList;
+    applyInverseOffsetToPosRot(/*out*/_tempVec, /*out*/_tempQuat, pt, NULL_QUAT, entityList.offsetPos, entityList.offsetRot);
+    for (let cell of SH.cellsSurroundingPosition(_tempVec, entityList.spatialHash)) {
+      for (let entity of cell) {
+        if (entity === null || !entity.visible || entity.deleted) {
+          continue;
+        }
+        let currSqrDist = Vec3.sqrDist(entity.pos, _tempVec);  
+        if (currSqrDist < sqrDistance) {
+          sqrDistance = currSqrDist; 
+          closest = entity;
+          closestSourceList = entityList;
+        }    
       }
     }
   }
-  
+  //   for (let entity of entityList.entities) {
+  //     if (entity === null || !entity.visible || entity.deleted) {
+  //       continue;
+  //     }
+  //     Vec3.add(/*out*/_tempVec
+  //             , entityList.offsetPos
+  //             , Vec3.transformQuat(/*out*/_tempVec
+  //                                 , entity.pos, entityList.offsetRot));
+  //     let currSqrDist = Vec3.sqrDist(_tempVec, pt);
+  //     if (currSqrDist < sqrDistance) {
+  //       sqrDistance = currSqrDist; 
+  //       closest = entity;
+  //       closestSourceList = entityList;
+  //     }
+  //   }
+  // }
   return [closest, closestSourceList];
 }
 
@@ -1254,8 +1276,7 @@ function doProcessControllerInput () : IAction[] {
 }
 
 
-const _tempQuat = Quat.create();
-const _tempVec = Vec3.create();
+
 
 let _finishedSending : boolean = true;
 let _framesDroppedPerSecond = 0;
