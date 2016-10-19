@@ -54,16 +54,19 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
 const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
 const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
-const NULL_QUAT = Quat.create();
+const IDENT_QUAT = Quat.create();
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
+
+const CELL_SIZE = 1;
+const CELL_COUNT = 1024;
 
 
 let _interval : null|NodeJS.Timer = null;
@@ -150,7 +153,7 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
 }
 
 function sendModel (model : IEntity, callback : () => (err: any, bytes: number) => void) {
-  sendEntityData(NULL_VECTOR3, NULL_QUAT, UNIT_VECTOR3, model, callback);
+  sendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, model, callback);
 }
 
 function sendEntityList (entityList : IEntityList, callback : () => (err: any, bytes: number) => void) {
@@ -231,13 +234,6 @@ function cloneEntity (entity : IEntity) : IEntity {
 
 function applyOffsetToEntity (entity : IEntity, offsetPos : IVector3, offsetRot : IQuaternion) {
   applyOffsetToPosRot(entity.pos, entity.rot, entity.pos, entity.rot, offsetPos, offsetRot);
-  // const rot = Quat.mul(/*out*/Quat.create()
-  //                     , offsetRot, entity.rot);
-  // const pos = Vec3.add(/*out*/Vec3.create()
-  //                     , offsetPos, Vec3.transformQuat(/*out*/_tempVec
-  //                                                    , entity.pos, offsetRot));
-  // Vec3.copy(entity.pos, pos);
-  // Quat.copy(entity.rot, rot);
 }
 
 function applyOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : IVector3, inRot : IQuaternion, offsetPos : IVector3, offsetRot : IQuaternion) {
@@ -249,13 +245,45 @@ function applyOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : I
 }
 
 function applyInverseOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : IVector3, inRot : IQuaternion, offsetPos : IVector3, offsetRot : IQuaternion) {
-  Quat.mul(/*out*/outRot
-          , Quat.invert(/*out*/Quat.create(), offsetRot), inRot);
-  Vec3.sub(/*out*/outPos
-          , Vec3.transformQuat(/*out*/outPos
-                              , inPos, offsetRot)
-          , offsetPos);
+  let negRot = Quat.invert(/*out*/Quat.create(), offsetRot);
+  let tempOutP = Vec3.create();
+  Vec3.transformQuat(/*out*/outPos
+                    , Vec3.sub(/*out*/outPos
+                              , inPos
+                              , offsetPos)
+                    , negRot);
+  Quat.invert(/*out*/outRot,
+             Quat.mul(/*out*/outRot
+                     , Quat.invert(/*out*/outRot
+                                  , inRot)
+                     , offsetRot));
 }
+
+// function applyInverseOffsetToPosRot (outPos : IVector3, outRot : IQuaternion, inPos : IVector3, inRot : IQuaternion, offsetPos : IVector3, offsetRot : IQuaternion) {
+//   let negRot = Quat.invert(/*out*/Quat.create(), offsetRot);
+//   Quat.mul(/*out*/outRot
+//           , negRot, inRot);
+//   Vec3.sub(/*out*/outPos
+//           , Vec3.transformQuat(/*out*/outPos
+//                               , inPos, offsetRot)
+//           , offsetPos);
+// }
+
+// inPosRot: 1,0,0  ;  90 around y ->
+// offset: 1,1,0 ; -90 around z 
+// outPosRot:  1,1,0 + (1,0,0 rotated by -90 around z)  ; -90 around z then 90 around y 
+
+// - offsetPos
+// rotate by inverse offsetRot
+// ((1,1,0 + (1,0,0 rotated by -90 around z)) - (1,1,0)) * inverse(-90 around z)    ;   
+// 
+
+// perform inverse(inRot)
+// = -90 around y then 90 around z
+// rotate by offsetRot
+// = -90 around y
+// perform inverse
+// 90 around y
 
 function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEntity {
   return {
@@ -412,14 +440,17 @@ interface IAction {
   type: ACTION_TYPE;
 }
 
-interface IActionMoveBy extends IAction {
+interface IActionWithEntity extends IAction {
+  type: ACTION_TYPE;
   entity: IEntity;
+}
+
+interface IActionMoveBy extends IActionWithEntity {
   posOffset: IVector3;
   rotOffset: IQuaternion;
 }
 
-interface IActionDelete extends IAction {
-  entity: IEntity;
+interface IActionDelete extends IActionWithEntity {
 }
 
 function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) : IActionDelete {
@@ -475,26 +506,59 @@ interface IShelf {
   clonableModels: IEntityList;
 }
 
-function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
-  let entitiesList = makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot);
+function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule {
+  //FIXME TODO(JULIAN): IMPLEMENT ME 
   let offset = 0;
-  for (let cond of conditions) {
-    switch (cond.type) {
-      // TODO(JULIAN): Handle intersection!!!
-      case CONDITION_TYPE.PRESENT:
-        entitiesList.entities.push(makeEntity( Vec3.fromValues(0,0.9+(offset+=0.3),0)
-                                             , Quat.create()
-                                             , Vec3.clone(UNIT_VECTOR3)
-                                             , new Uint8Array([0xFF,0x00,0x00,0xEE])
-                                             , (<IConditionPresent>cond).entity.type));
+  const conditions : ICondition[] = [];
+  const entitiesList = makeEntityList(state.oven.model.pos, state.oven.model.rot);
+  const ruleEntities : IEntity[] = [];
+  const firstEntityPos = Vec3.clone(entities[0].pos);
+  Vec3.sub(/*out*/firstEntityPos, firstEntityPos, Vec3.fromValues(0,1.17,0));
+  for (let entity of entities) {
+    const clone = cloneEntity(entity);
+    Vec3.sub(/*out*/clone.pos, clone.pos, firstEntityPos);
+    Quat.copy(/*out*/clone.rot, IDENT_QUAT);
+    ruleEntities.push(clone);
+    conditions.push(makePresentCondition(clone));
+  }
+  for (let e1Index = 0; e1Index < ruleEntities.length; e1Index++) {
+    const e1 = ruleEntities[e1Index];
+    for (let e2Index = e1Index+1; e2Index < ruleEntities.length; e2Index++) { // This way we don't duplicate intersection conditions (we store A-B but not B-A)
+      const e2 = ruleEntities[e2Index];
+      if (doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
+        conditions.push(makeIntersectCondition(e1, e2));
+      }
     }
   }
+  entitiesList.entities.push(...ruleEntities);
+
   return {
     conditions: conditions
   , actions: []
   , entities: entitiesList
   };
 }
+
+// function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
+//   let entitiesList = makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot);
+//   let offset = 0;
+//   for (let cond of conditions) {
+//     switch (cond.type) {
+//       // TODO(JULIAN): Handle intersection!!!
+//       case CONDITION_TYPE.PRESENT:
+//         entitiesList.entities.push(makeEntity( Vec3.fromValues(0,0.9+(offset+=0.3),0)
+//                                              , Quat.create()
+//                                              , Vec3.clone(UNIT_VECTOR3)
+//                                              , new Uint8Array([0xFF,0x00,0x00,0xEE])
+//                                              , (<IConditionPresent>cond).entity.type));
+//     }
+//   }
+//   return {
+//     conditions: conditions
+//   , actions: []
+//   , entities: entitiesList
+//   };
+// }
 
 function conditionExistsInConditions (condition: ICondition, conditions: ICondition[]) : boolean {
   for (let testcond of conditions) {
@@ -521,6 +585,82 @@ function getIndexOfConditionsInRules (conditions: ICondition[], rules: IRule[]) 
   for (let i = rules.length - 1; i >= 0; i--) {
     const currRule = rules[i];
     if (conditionsMatch(conditions, currRule.conditions)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+type CollisionHash = number;
+
+function unordered2EntityHash (entityA : IEntity, entityB : IEntity) : CollisionHash {
+  let min, max;
+  if (entityA.type < entityB.type) {
+    min = entityA.type;
+    max = entityB.type;
+  } else {
+    min = entityB.type;
+    max = entityA.type;
+  }
+  return ((max << 16) ^ min);
+}
+
+function doesRuleApplyToEntityConfiguration (rule : IRule, entities : IEntity[]) : boolean {
+  //TODO(JULIAN): Ensure that this works for interesting intersection cases (since we're ignoring entity refs)
+  let requiredPresent = new Map<MODEL_TYPE,number>();
+  let requiredIntersect = new Map<CollisionHash,number>();
+
+  for (let cond of rule.conditions) {
+    switch (cond.type) {
+      case CONDITION_TYPE.PRESENT:
+        const comparisonType = (<IConditionPresent>cond).entity.type; 
+        requiredPresent.set(comparisonType, (requiredPresent.get(comparisonType) || 0)+1);
+        break;
+      case CONDITION_TYPE.INTERSECT:
+        const comparisonA = (<IConditionIntersect>cond).entityA;
+        const comparisonB = (<IConditionIntersect>cond).entityB;
+        const test = unordered2EntityHash(comparisonA, comparisonB);
+        requiredIntersect.set(test, (requiredIntersect.get(test) || 0) + 1);
+        break;
+    }
+  }
+
+  for (let index1 = 0; index1 < entities.length; index1++) {
+    const e1 = entities[index1];
+    const eCount = requiredPresent.get(e1.type) || 0;
+    if (eCount <= 0) {
+      return false;
+    }
+    requiredPresent.set(e1.type, eCount-1);
+    for (let index2 = index1+1; index2 < entities.length; index2++) {
+      const e2 = entities[index2];
+      if (doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
+        const test = unordered2EntityHash(e1, e2);
+        const eCount = requiredIntersect.get(test) || 0;
+        if (eCount === 0) {
+          return false;
+        }
+        requiredIntersect.set(test, eCount-1);
+      }
+    }
+  }
+  for (let v of requiredPresent.values()) {
+    if (v !== 0 && v !== undefined) {
+      return false;
+    }
+  }
+  for (let v of requiredIntersect.values()) {
+    if (v !== 0 && v !== undefined) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getIndexOfRuleThatAppliesToEntityConfiguration (entities : IEntity[], rules: IRule[]) : number {
+  for (let i = rules.length - 1; i >= 0; i--) {
+    const currRule = rules[i];
+    if (doesRuleApplyToEntityConfiguration(currRule, entities)) {
       return i;
     }
   }
@@ -582,9 +722,6 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
          , currRule: null
          };
 }
-
-const CELL_SIZE = 1;
-const CELL_COUNT = 1024;
 
 function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion) : IEntityList {
   return {
@@ -803,13 +940,13 @@ function getInitialState () : IState {
 
     , inProgressAlterations: []
     // , latestEntityId: 0
-    , segments: []
-              //    makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
-              //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
-              //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
-              //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
-              //  , makeSegmentFn(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
-              //  ]
+    , segments: [
+                 makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
+               ]
     };
 
     // for (let i = 0; i < 500; i++) {
@@ -849,38 +986,38 @@ function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVecto
   let closest = null;
   let closestSourceList : IEntityList = null;
   let sqrDistance = Infinity;
+  
+  let XXXc = 0;
   for (let entityList of entityLists) {
-    applyInverseOffsetToPosRot(/*out*/_tempVec, /*out*/_tempQuat, pt, NULL_QUAT, entityList.offsetPos, entityList.offsetRot);
-    for (let cell of SH.cellsSurroundingPosition(_tempVec, entityList.spatialHash)) {
-      for (let entity of cell) {
-        if (entity === null || !entity.visible || entity.deleted) {
-          continue;
-        }
-        let currSqrDist = Vec3.sqrDist(entity.pos, _tempVec);  
-        if (currSqrDist < sqrDistance) {
-          sqrDistance = currSqrDist; 
-          closest = entity;
-          closestSourceList = entityList;
-        }    
+    applyInverseOffsetToPosRot(/*out*/_tempVec, /*out*/_tempQuat
+                              , pt, IDENT_QUAT, entityList.offsetPos, entityList.offsetRot);
+
+    // for (let cell of SH.cellsSurroundingPosition(_tempVec, entityList.spatialHash)) {
+    //   for (let entity of cell) {
+    //     if (entity === null || !entity.visible || entity.deleted) {
+    //       continue;
+    //     }
+    //     let currSqrDist = Vec3.sqrDist(entity.pos, _tempVec);  
+    //     if (currSqrDist < sqrDistance) {
+    //       sqrDistance = currSqrDist; 
+    //       closest = entity;
+    //       closestSourceList = entityList;
+    //     }    
+    //   }
+    // }
+    
+    for (let entity of entityList.entities) {
+      if (entity === null || !entity.visible || entity.deleted) {
+        continue;
+      }
+      let currSqrDist = Vec3.sqrDist(_tempVec, entity.pos);
+      if (currSqrDist < sqrDistance) {
+        sqrDistance = currSqrDist; 
+        closest = entity;
+        closestSourceList = entityList;
       }
     }
   }
-  //   for (let entity of entityList.entities) {
-  //     if (entity === null || !entity.visible || entity.deleted) {
-  //       continue;
-  //     }
-  //     Vec3.add(/*out*/_tempVec
-  //             , entityList.offsetPos
-  //             , Vec3.transformQuat(/*out*/_tempVec
-  //                                 , entity.pos, entityList.offsetRot));
-  //     let currSqrDist = Vec3.sqrDist(_tempVec, pt);
-  //     if (currSqrDist < sqrDistance) {
-  //       sqrDistance = currSqrDist; 
-  //       closest = entity;
-  //       closestSourceList = entityList;
-  //     }
-  //   }
-  // }
   return [closest, closestSourceList];
 }
 
@@ -1022,21 +1159,12 @@ function doProcessOvenInput () {
     }
   }
   STATE.oven.buttonModels.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
-  let conditions : ICondition[] = [];
   if (objectsInOven.length > 0) {
-    for (var obj of objectsInOven) {
-      conditions.push(makePresentCondition(obj));
-      for (var obj2 of objectsInOven) {
-        if (doVolumesOverlap(obj.pos, obj.interactionVolume, obj2.pos, obj2.interactionVolume)) {
-          conditions.push(makeIntersectCondition(obj, obj2));
-        }
-      } 
-    }
-
-    let ruleIndex = getIndexOfConditionsInRules(conditions, STATE.oven.rules);
+    // Check if any rule's conditions applies exactly to these objects. If not, we'll make a rule for them
+    let ruleIndex = getIndexOfRuleThatAppliesToEntityConfiguration(objectsInOven, STATE.oven.rules);
     if (ruleIndex < 0) {
       // rule for this condition doesn't exist yet, so we need to make it
-      ruleIndex = STATE.oven.rules.push(makeEmptyRuleForConditions(STATE, conditions)) - 1;
+      ruleIndex = STATE.oven.rules.push(makeEmptyRuleForEntities(objectsInOven, STATE)) - 1;
       console.log("MADE OVEN RULE");
     }
     STATE.oven.currRule = STATE.oven.rules[ruleIndex];
@@ -1051,7 +1179,7 @@ function doProcessOvenInput () {
     }
     // NOTE(JULIAN): Action recording is handled outside of this function, which may be a bit odd
   } else {
-    // We're not working on any rules
+    // We're not working on any rules (because there are no objects in the oven)
     STATE.oven.currRule = null;
     STATE.oven.actionIndex = -1;
 
@@ -1115,6 +1243,104 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
   }
 }
 
+function performSimulationForRuleWith1Cond (entityList : IEntityList, rule : IRule) {
+  const cond = rule.conditions[0];
+  if (cond.type === CONDITION_TYPE.PRESENT) {
+    const eType = (<IConditionPresent>cond).entity.type;
+    for (let entity of entityList.entities) {
+      if (entity.type === entity.type) {
+        for (let action of rule.actions) {
+          performActionOnEntity(action, entity);
+        }
+      }
+    }
+  }
+}
+
+function performSimulationForRuleWith2Cond (entityList : IEntityList, rule : IRule) {
+  const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
+
+  const hash = unordered2EntityHash(presentConds[0].entity, presentConds[1].entity);
+
+  const entities = entityList.entities;
+  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
+    for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
+      let e1 = entities[e1Index];
+      let e2 = entities[e2Index];
+      if (unordered2EntityHash(e1, e2) === hash) {
+        if (e1.type !== presentConds[0].entity.type) {
+          const temp = e1;
+          e1 = e2;
+          e2 = temp;
+        }
+        for (let action of rule.actions) {
+          switch (action.type) {
+            case ACTION_TYPE.MOVE_BY:
+            case ACTION_TYPE.DELETE:
+            if ((<IActionWithEntity>action).entity === presentConds[0].entity) {
+              performActionOnEntity(action, e1);
+            } else {
+              performActionOnEntity(action, e2);
+            }
+          }
+        }
+        break;
+      }
+    } 
+  }
+}
+
+function performSimulationForRuleWith3Cond (entityList : IEntityList, rule : IRule) {
+  const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
+  const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
+
+  const hash = unordered2EntityHash(intersectCond.entityA, intersectCond.entityB);
+
+  const entities = entityList.entities;
+  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
+    for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
+      let e1 = entities[e1Index];
+      let e2 = entities[e2Index];
+      if (unordered2EntityHash(e1, e2) === hash &&
+          doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
+        if (e1.type !== intersectCond.entityA.type) {
+          const temp = e1;
+          e1 = e2;
+          e2 = temp;
+        }
+        for (let action of rule.actions) {
+          switch (action.type) {
+            case ACTION_TYPE.MOVE_BY:
+            case ACTION_TYPE.DELETE:
+            if ((<IActionWithEntity>action).entity === intersectCond.entityA) {
+              performActionOnEntity(action, e1);
+            } else {
+              performActionOnEntity(action, e2);
+            }
+          }
+        }
+        break;
+      }
+    } 
+  }
+}
+
+function performSimulation (entityList : IEntityList, rules : IRule[]) {
+  for (let rule of rules) {
+    if (rule.actions.length == 0) {
+      continue; // Short circuit checking
+    }
+    if (rule.conditions.length === 1) {
+      performSimulationForRuleWith1Cond(entityList, rule);
+    } else if (rule.conditions.length === 2) {
+      performSimulationForRuleWith2Cond(entityList, rule);
+    } else if (rule.conditions.length === 3) {
+      performSimulationForRuleWith3Cond(entityList, rule);
+    } else {
+      console.log(`Unable to handle rule with ${rule.conditions.length} conditions!`);
+    }
+  }
+}
 
 function didControllerJustGrab (controller : IController) : boolean {
   return (controller.grab.curr === 1) && (controller.grab.last === 0);
@@ -1302,38 +1528,22 @@ NETWORK.bind(undefined, undefined, () => {
     }
 
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
-      const entities = STATE.entities;
-      for (let entity of entities.entities) {
-        // Vec3.scaleAndAdd(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, entity.vel, entity.rot), 1/FPS); // pos = pos + vel * dt_in_units_per_sec
-
-        // FIXME(JULIAN) XXX(JULIAN): This improperly checks to see if rules apply, mainly because we don't check intersections
-        for (let rule of STATE.oven.rules) {
-          let ruleApplies = true;
-          for (let cond of rule.conditions) {
-            switch (cond.type) {
-              case CONDITION_TYPE.PRESENT:
-                if ((<IConditionPresent>cond).entity.type !== entity.type) {
-                  ruleApplies = false;
-                }
-                break;
-            }
-          }
-          if (ruleApplies) {
-            // console.log(`ACTION COUNT: ${rule.actions.length}`)
-            for (let action of rule.actions) {
-              performActionOnEntity(action, entity);
-              // console.log(`DOING: posOffset ${(<IActionMoveBy>action).posOffset}`);
-            }
-          }
-        }
-
-      }
+      performSimulation(STATE.entities, STATE.oven.rules);
       STATE.simulationTime += 1/FPS;
     }
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
       STATE.simulating = SIMULATION_TYPE.PAUSED;
     }
 
+    // SH.clearCells(STATE.shelf.clonableModels.spatialHash);
+    // for (let entity of STATE.shelf.clonableModels.entities) {
+    //   SH.addToCell(entity, entity.pos, STATE.shelf.clonableModels.spatialHash);
+    // }
+
+    // SH.clearCells(STATE.entities.spatialHash);
+    // for (let entity of STATE.entities.entities) {
+    //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
+    // }
 
     if (!_finishedSending) {
       _framesDroppedPerSecond++;      
@@ -1360,15 +1570,16 @@ NETWORK.bind(undefined, undefined, () => {
 
             Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
               Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
-                let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+                // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+
+                Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
+                  let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+                });
 
                 _finishedSending = true;
               });
             });
 
-            // Promise.each(STATE.segments, (segment) => { return sendSegmentFn(segment); }).then(() => {
-            //   let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-            // });
 
             // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
             });
@@ -1405,9 +1616,6 @@ NETWORK.on('message', (message : Buffer, remote) => {
                           , controllers: [ makeController(CONTROLLER_ATTACHMENT_TYPE.DELETE)
                                          , makeController(CONTROLLER_ATTACHMENT_TYPE.GRAB) ]});
   }
-
-  // inputData.get(client)[0].grab.last = inputData.get(client)[0].grab.curr;
-  // inputData.get(client)[1].grab.last = inputData.get(client)[1].grab.curr;
 
   let offset = 0;
   Vec3.set(/*out*/inputData.get(client).headset.pos

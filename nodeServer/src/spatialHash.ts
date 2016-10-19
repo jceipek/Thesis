@@ -15,10 +15,14 @@ function mod (n : number, m : number) : number {
 }
 
 export function make<T> (cellSize : number, cellCount : number) : ISpatialHash<T> {
+  const cells = new Array<T[]>(cellCount);
+  for (let i = 0; i < cellCount; i++) {
+    cells[i] = [];
+  }
   return {
     cellSize: cellSize
   , cellCount: cellCount
-  , cells: new Array<T[]>(cellCount)
+  , cells: cells
   };
 }
 
