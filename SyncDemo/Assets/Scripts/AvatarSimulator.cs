@@ -93,6 +93,9 @@ public class AvatarSimulator : MonoBehaviour {
 	}
 
 	void OnDrawGizmos () {
+		if (!_hasBeenInitialized) {
+			Init();
+		}
 		Gizmos.color = Color.green;
 		for (int i = 0; i < _eyeballOrigins.Length; i++) {
 			Gizmos.DrawWireSphere(_eyeballs[i].position, _eyeballBoundaryRadius);

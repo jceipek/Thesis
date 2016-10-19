@@ -11,7 +11,7 @@ public class NetManager : MonoBehaviour {
     public static NetManager G = null; 
     [SerializeField] string _serverIPAddress = "127.0.0.1";
     [SerializeField] int _ioPort = 8053;
-    [SerializeField] IOLayer _ioLayer;
+    [SerializeField] MessageHandler _messageHandler;
 
     Socket _clientSock = new Socket(AddressFamily.InterNetwork, // IPv4
                                     SocketType.Dgram, 
@@ -79,7 +79,7 @@ public class NetManager : MonoBehaviour {
             _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
             // Debug.Log(_readMessageBuffer.Count);
             for (int i = 0; i < _readMessageBuffer.Count; i++) {
-                _ioLayer.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
+                _messageHandler.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
                 // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
             }
             _readMessageBuffer.Count = 0;

@@ -27,6 +27,7 @@ GameObject:
   - 4: {fileID: 458974}
   - 114: {fileID: 11411726}
   - 114: {fileID: 114000011219833236}
+  - 114: {fileID: 114000011121268190}
   m_Layer: 0
   m_Name: Controller (left)
   m_TagString: Untagged
@@ -52,7 +53,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!1 &147176
 GameObject:
   m_ObjectHideFlags: 1
@@ -97,6 +98,7 @@ GameObject:
   - 4: {fileID: 402434}
   - 114: {fileID: 11463128}
   - 114: {fileID: 114000011516958070}
+  - 114: {fileID: 114000012372808416}
   m_Layer: 0
   m_Name: Controller (right)
   m_TagString: Untagged
@@ -1695,6 +1697,24 @@ Animator:
   m_WarningMessage: 
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
+--- !u!114 &114000011121268190
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 124034}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b89fa62dc25fb4652910b37eadbecbb1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _controllerAttachmentTypeToPrefabs:
+  - ControllerAttachmentType: 0
+    Prefab: {fileID: 0}
+  - ControllerAttachmentType: 1
+    Prefab: {fileID: 1000010293930918, guid: 867a60dddd1c74e33a4b172862abdcb8, type: 2}
+  - ControllerAttachmentType: 2
+    Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
 --- !u!114 &114000011219833236
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -1707,13 +1727,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _controllerTrackedObject: {fileID: 11411726}
-  _controllerAttachmentTypeToPrefabs:
-  - ControllerAttachmentType: 0
-    Prefab: {fileID: 0}
-  - ControllerAttachmentType: 1
-    Prefab: {fileID: 1000010293930918, guid: 867a60dddd1c74e33a4b172862abdcb8, type: 2}
-  - ControllerAttachmentType: 2
-    Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
+  _visualizer: {fileID: 114000011121268190}
 --- !u!114 &114000011516958070
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -1726,6 +1740,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _controllerTrackedObject: {fileID: 11463128}
+  _visualizer: {fileID: 114000012372808416}
+--- !u!114 &114000012372808416
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 159396}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b89fa62dc25fb4652910b37eadbecbb1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
   _controllerAttachmentTypeToPrefabs:
   - ControllerAttachmentType: 0
     Prefab: {fileID: 0}

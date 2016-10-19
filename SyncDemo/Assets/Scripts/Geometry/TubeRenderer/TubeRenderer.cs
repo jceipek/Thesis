@@ -85,10 +85,10 @@ public class TubeRenderer : MonoBehaviour {
                                 rotation);
         }
         for (int i = 0; i < segmentCount; i++) {
-#if UNITY_EDITOR
-            Debug.DrawRay(_provider.Segment(i) + transform.position, _normals[i], Color.blue);
-            Debug.DrawRay(_provider.Segment(i) + transform.position, _provider.Tangent(i), Color.green);
-#endif
+// #if UNITY_EDITOR
+//             Debug.DrawRay(_provider.Segment(i) + transform.position, _normals[i], Color.blue);
+//             Debug.DrawRay(_provider.Segment(i) + transform.position, _provider.Tangent(i), Color.green);
+// #endif
             float v = i / (float)segmentCount;
             BuildRingUVs(_tubeBuilder, _radialResolution, v);
         }

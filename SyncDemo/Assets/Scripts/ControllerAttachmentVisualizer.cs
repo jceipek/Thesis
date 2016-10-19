@@ -7,9 +7,7 @@
 		public GameObject Prefab;
 	}
 
-	public class ControllerManager : MonoBehaviour {
-
-		[SerializeField] SteamVR_TrackedObject _controllerTrackedObject;
+	public class ControllerAttachmentVisualizer : MonoBehaviour {
 		[SerializeField] ControllerAttachmentTypeToPrefab[] _controllerAttachmentTypeToPrefabs;
 
 		static GameObject[] _prefabsForModels;
@@ -56,12 +54,6 @@
 						_model.SetActive(true);
 					}
 				}
-			}
-		}
-
-		public SteamVR_TrackedObject TrackedObject {
-			get {
-				return _controllerTrackedObject;
 			}
 		}
 	}
