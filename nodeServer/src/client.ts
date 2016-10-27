@@ -376,6 +376,13 @@ function makeHeadset () : IHeadset {
 //   return (2/halfPeriod) * (t - halfPeriod * (t/halfPeriod + 1/2)) * Math.pow(-1, (t/halfPeriod) + 1/2);
 // }
 
+function doesPointOverlapVolume (pt : IVector3, posB : IVector3, volA : IInteractionVolume) {
+  if (volA.type == VOLUME_TYPE.SPHERE) {
+    return Vec3.sqrDist(pt,posB) <= ((<ISphereInteractionVolume>volA).radius * (<ISphereInteractionVolume>volA).radius);
+  }
+  return false;
+}
+
 function doVolumesOverlap (posA : IVector3, volA : IInteractionVolume, posB : IVector3, volB : IInteractionVolume) {
   if (volA.type == VOLUME_TYPE.SPHERE && volB.type == VOLUME_TYPE.SPHERE) {
     return Vec3.sqrDist(posA,posB) <= ((<ISphereInteractionVolume>volA).radius + (<ISphereInteractionVolume>volB).radius) * 
@@ -542,6 +549,76 @@ function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule 
   , actions: []
   , entities: entitiesList
   };
+}
+
+function setControllerInteractionPoint (outPt : IVector3, inPos : IVector3, inRot : IQuaternion, attachment : CONTROLLER_ATTACHMENT_TYPE) {
+  switch (attachment) {
+    case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+      const offset = Vec3.fromValues(0, -0.0243, 0.0352);
+      Vec3.add(/*out*/outPt
+              , inPos, Vec3.transformQuat(/*out*/offset
+                                         , offset, inRot));
+      break;
+    case CONTROLLER_ATTACHMENT_TYPE.DELETE:
+      Vec3.copy(/*out*/outPt
+               , inPos);
+      break;
+  }
+}
+
+function gizmoFlagsForEntityGivenController (entity: IEntity, sourceList : IEntityList, controller : IController) : GIZMO_VISUALS_FLAGS {
+  const gizmoRadius = 0.08011519831;
+  const gizmoAxisTargetRadius = 0.015;
+  const gizmoAxisTarget : ISphereInteractionVolume = { type: VOLUME_TYPE.SPHERE, radius: gizmoAxisTargetRadius };
+
+  let entityAbsPos = Vec3.create();
+  let entityAbsRot = Quat.create();
+
+  applyOffsetToPosRot(/*out*/entityAbsPos, /*out*/entityAbsRot, entity.pos, entity.rot, sourceList.offsetPos, sourceList.offsetRot);
+  applyInverseOffsetToPosRot(/*out*/_tempVec, /*out*/_tempQuat, controller.pos, controller.rot, entityAbsPos, entityAbsRot);
+  setControllerInteractionPoint(/*out*/_tempVec, _tempVec, _tempQuat, controller.attachment);
+
+  const controllerPos = _tempVec;
+
+  if (doesPointOverlapVolume(controllerPos, Vec3.fromValues(gizmoRadius, 0, 0), gizmoAxisTarget) ||
+      doesPointOverlapVolume(controllerPos, Vec3.fromValues(-gizmoRadius, 0, 0), gizmoAxisTarget)
+      ) {
+    return GIZMO_VISUALS_FLAGS.XAxis;
+  }
+  if (doesPointOverlapVolume(controllerPos, Vec3.fromValues(0, gizmoRadius, 0), gizmoAxisTarget) ||
+      doesPointOverlapVolume(controllerPos, Vec3.fromValues(0, -gizmoRadius, 0), gizmoAxisTarget)
+      ) {
+    return GIZMO_VISUALS_FLAGS.YAxis;
+  }
+  if (doesPointOverlapVolume(controllerPos, Vec3.fromValues(0, 0, gizmoRadius), gizmoAxisTarget) ||
+      doesPointOverlapVolume(controllerPos, Vec3.fromValues(0, 0, -gizmoRadius), gizmoAxisTarget)
+      ) {
+    return GIZMO_VISUALS_FLAGS.ZAxis;
+  }
+
+  const gizmoRadiusSquared = gizmoRadius * gizmoRadius;
+  const gizmoRingTargetThicknessRadius = 0.008;
+  const gizmoOuterRadius = gizmoRadius+gizmoRingTargetThicknessRadius;
+  const gizmoInnerRadius = gizmoRadius-gizmoRingTargetThicknessRadius;
+  if ((controllerPos[1]*controllerPos[1] + controllerPos[2]*controllerPos[2] <= gizmoOuterRadius*gizmoOuterRadius) &&
+      (controllerPos[1]*controllerPos[1] + controllerPos[2]*controllerPos[2] >= gizmoInnerRadius*gizmoInnerRadius) &&
+      Math.abs(controllerPos[0]) <= gizmoRingTargetThicknessRadius) {
+        return GIZMO_VISUALS_FLAGS.XRing;
+  }
+  if ((controllerPos[0]*controllerPos[0] + controllerPos[2]*controllerPos[2] <= gizmoOuterRadius*gizmoOuterRadius) &&
+      (controllerPos[0]*controllerPos[0] + controllerPos[2]*controllerPos[2] >= gizmoInnerRadius*gizmoInnerRadius) &&
+      Math.abs(controllerPos[1]) <= gizmoRingTargetThicknessRadius) {
+        return GIZMO_VISUALS_FLAGS.YRing;
+  }
+  if ((controllerPos[0]*controllerPos[0] + controllerPos[1]*controllerPos[1] <= gizmoOuterRadius*gizmoOuterRadius) &&
+      (controllerPos[0]*controllerPos[0] + controllerPos[1]*controllerPos[1] >= gizmoInnerRadius*gizmoInnerRadius) &&
+      Math.abs(controllerPos[2]) <= gizmoRingTargetThicknessRadius) {
+        return GIZMO_VISUALS_FLAGS.ZRing;
+  }
+
+  return GIZMO_VISUALS_FLAGS.XAxis | GIZMO_VISUALS_FLAGS.YAxis | GIZMO_VISUALS_FLAGS.ZAxis |
+         GIZMO_VISUALS_FLAGS.XRing | GIZMO_VISUALS_FLAGS.YRing | GIZMO_VISUALS_FLAGS.ZRing;
+
 }
 
 // function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
@@ -1459,8 +1536,7 @@ function doProcessControllerInput () : IAction[] {
           let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
           if (closestEntity !== null &&
               doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
-            //
-            closestEntity.gizmoVisuals = GIZMO_VISUALS_FLAGS.XAxis | GIZMO_VISUALS_FLAGS.YAxis | GIZMO_VISUALS_FLAGS.ZAxis; 
+            closestEntity.gizmoVisuals = gizmoFlagsForEntityGivenController(closestEntity, sourceList, controller); 
           }
         }
       } else if (usedAlteration.valid) {
