@@ -273,7 +273,7 @@ Transform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 748939406}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.274, y: 0.92, z: 0}
+  m_LocalPosition: {x: 1.337, y: 0.92, z: -0.17}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_Children: []
@@ -304,6 +304,7 @@ GameObject:
   - 124: {fileID: 812350448}
   - 92: {fileID: 812350447}
   - 81: {fileID: 812350446}
+  - 114: {fileID: 812350451}
   m_Layer: 0
   m_Name: Camera
   m_TagString: Untagged
@@ -379,6 +380,32 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 4
+--- !u!114 &812350451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 812350445}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f34538c338b6f6e4ebe79a2e32437704, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  transparentMode: 1
+  uiMode: 1
+  uikey: 116
+  accumShader: {fileID: 4800000, guid: af4206311b73ef4489d6b7b8fce0c185, type: 3}
+  revealageShader: {fileID: 4800000, guid: 05d435478ee6db845aee84771008a2dc, type: 3}
+  postEffectShader: {fileID: 4800000, guid: 4249cd976ff7d0d40b9c0c74386aa693, type: 3}
+  oitEnabled: 0
+  weightEnabled: 0
+  weight: -2
+  _layerOpaque:
+    serializedVersion: 2
+    m_Bits: 1
+  _layerTransparent:
+    serializedVersion: 2
+    m_Bits: 2
 --- !u!1 &1131208232
 GameObject:
   m_ObjectHideFlags: 0

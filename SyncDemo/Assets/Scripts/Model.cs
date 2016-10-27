@@ -9,6 +9,7 @@ public struct ModelTypeToPrefab {
 
 public class Model : MonoBehaviour {
 	[SerializeField] ModelTypeToPrefab[] _modelTypesToPrefabs;
+	[SerializeField] GizmoVisualizer _gizmoVisualizer;
 
 	static GameObject[] _prefabsForModels;
 	GameObject[] _instancedModels;
@@ -39,7 +40,8 @@ public class Model : MonoBehaviour {
 		return _prefabsForModels[(int)modelType];
 	}
 
-	public void UpdateData (ModelType modelType, Vector3 position, Quaternion rotation, Vector3 scale, Color32 tint, bool visible = true) {
+	public void UpdateData (ModelType modelType, Vector3 position, Quaternion rotation, Vector3 scale, Color32 tint, bool visible = true, GizmoVisualsFlags gizmoVisuals = GizmoVisualsFlags.None) {
+		_gizmoVisualizer.UpdateFromData(gizmoVisuals);
 		if (_modelType != modelType) {
 			if (_model != null) {
 				_model.SetActive(false);

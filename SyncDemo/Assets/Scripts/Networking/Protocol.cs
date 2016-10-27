@@ -1,6 +1,8 @@
 namespace Giverspace {
 using UnityEngine;
 
+using System;
+
 public enum MessageType {
   Unknown = -1,
   Position = 0X00,
@@ -11,6 +13,17 @@ public enum MessageType {
   Segment = 0X05,
   SimulationTime = 0X06,
   ControllerAttachment = 0X07
+}
+
+[FlagsAttribute]
+public enum GizmoVisualsFlags : byte {
+  None = 0X00,
+  XAxis = 0X01,
+  YAxis = 0X02,
+  ZAxis = 0X04,
+  XRing = 0X08,
+  YRing = 0X10,
+  ZRing = 0X20
 }
 
 public struct ControllerAttachmentTypes {
@@ -63,6 +76,7 @@ public struct NetMessage {
 	public Vector3 Scale;
 	public bool Visible;
 	public Color32 Tint;
+	public GizmoVisualsFlags GizmoVisuals;
 	public Vector3 Velocity;
 	public Color32 Color;
 	public Vector3 Destination;
@@ -70,6 +84,12 @@ public struct NetMessage {
 	public ControllerAttachmentTypes ControllerAttachments;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
+  		offset += 1;
+  		return res;
+  	}
+
+  	static GizmoVisualsFlags GizmoVisualsFromBuff (byte[] data, ref int offset) {
+  		GizmoVisualsFlags res = (GizmoVisualsFlags)data[offset];
   		offset += 1;
   		return res;
   	}
@@ -172,7 +192,8 @@ public struct NetMessage {
 		                        Rotation = QuaternionFromBuff(data, ref offset),
 		                        Scale = Vector3FromBuff(data, ref offset),
 		                        Visible = BoolFromBuff(data, ref offset),
-		                        Tint = ColorFromBuff(data, ref offset) };
+		                        Tint = ColorFromBuff(data, ref offset),
+		                        GizmoVisuals = GizmoVisualsFromBuff(data, ref offset) };
 	}
 
 	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
@@ -230,7 +251,7 @@ public struct NetMessage {
   					}
   					break;
   				case MessageType.PositionRotationScaleVisibleTintModel:
-  					if (messageLength == 54) {
+  					if (messageLength == 55) {
   						decodedMessage = DecodePositionRotationScaleVisibleTintModel(buffer, ref offset);
   						return true;
   					}

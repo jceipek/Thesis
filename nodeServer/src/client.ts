@@ -1,4 +1,4 @@
-import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE } from './protocol'
+import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS } from './protocol'
 import * as Protocol from './protocol'
 import * as FS from 'fs'
 import * as Promise from 'bluebird'
@@ -19,6 +19,7 @@ interface IEntity {
   scale: IVector3;
   visible: boolean;
   tint: IColor;
+  gizmoVisuals: GIZMO_VISUALS_FLAGS;
 
   interactionVolume: IInteractionVolume;
   children: IEntityList;
@@ -99,25 +100,25 @@ ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLE
 ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;
 
 function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR);
+  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
   let [host, portString] = destination.split(':');
   let port = parseInt(portString, 10);
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
   sendTarget(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR);
+    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
     _currSeqId++;
     sendTarget(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR);
+      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
       _currSeqId++;
       sendTarget(_sendBuffer, messageLength, host, port, () => {
         const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3,
-         true, BASE_COLOR);
+         true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
          _currSeqId++;
         sendTarget(_sendBuffer, messageLength, host, port, () => {
           const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3,
-          true, BASE_COLOR);
+          true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
           _currSeqId++;
           sendTarget(_sendBuffer, messageLength, host, port, callback);
         });
@@ -143,7 +144,8 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
                                                                                        , rot
                                                                                        , scale
                                                                                        , entity.visible && !entity.deleted 
-                                                                                       , entity.tint);
+                                                                                       , entity.tint
+                                                                                       , entity.gizmoVisuals);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
     Promise.each(entity.children.entities, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
@@ -207,6 +209,7 @@ function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IC
   , children: makeEntityList(pos, rot)
   , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
   , deleted: false
+  , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
   };
 }
 
@@ -229,6 +232,7 @@ function cloneEntity (entity : IEntity) : IEntity {
   , tint: new Uint8Array(entity.tint)
   , interactionVolume: entity.interactionVolume
   , deleted: entity.deleted
+  , gizmoVisuals: entity.gizmoVisuals
   };
 }
 
@@ -297,6 +301,7 @@ function makeModel (pos : IVector3, rot: IQuaternion, type : MODEL_TYPE) : IEnti
   , interactionVolume: null
   , children: makeEntityList(pos, rot)
   , deleted: false
+  , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
   };
 }
 
@@ -1126,7 +1131,24 @@ function doProcessClockInput () {
   } 
 }
 
-function doProcessOvenInput () {
+function determineObjectsInOven () {
+  const objectsInOven : IEntity[] = [];
+  const ovenModel = STATE.oven.model;
+  Vec3.add(/*out*/_tempVec
+          , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
+                                             , Vec3.fromValues(0, 0.364, 0.039), ovenModel.rot));
+
+  const entities = STATE.entities;
+  for (let entity of entities.entities) {
+    if ((!entity.deleted && entity.visible) && doVolumesOverlap(entity.pos, entity.interactionVolume
+                        , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
+        objectsInOven.push(entity);
+    }
+  }
+  return objectsInOven;
+}
+
+function doProcessOvenInput (objectsInOven : IEntity[]) {
   const buttonTypes = [ MODEL_TYPE.OVEN_CANCEL_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
@@ -1144,20 +1166,6 @@ function doProcessOvenInput () {
       }
   }
 
-
-  const objectsInOven : IEntity[] = [];
-  const ovenModel = STATE.oven.model;
-  Vec3.add(/*out*/_tempVec
-          , ovenModel.pos, Vec3.transformQuat(/*out*/_tempVec
-                                             , Vec3.fromValues(0, 0.364, 0.039), ovenModel.rot));
-
-  const entities = STATE.entities;
-  for (let entity of entities.entities) {
-    if ((!entity.deleted && entity.visible) && doVolumesOverlap(entity.pos, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
-                        , /*oven Center*/_tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.4 })) {
-        objectsInOven.push(entity);
-    }
-  }
   STATE.oven.buttonModels.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
   if (objectsInOven.length > 0) {
     // Check if any rule's conditions applies exactly to these objects. If not, we'll make a rule for them
@@ -1333,7 +1341,7 @@ function performSimulation (entityList : IEntityList, rules : IRule[]) {
     if (rule.conditions.length === 1) {
       performSimulationForRuleWith1Cond(entityList, rule);
     } else if (rule.conditions.length === 2) {
-      performSimulationForRuleWith2Cond(entityList, rule);
+      //performSimulationForRuleWith2Cond(entityList, rule);
     } else if (rule.conditions.length === 3) {
       performSimulationForRuleWith3Cond(entityList, rule);
     } else {
@@ -1446,6 +1454,14 @@ function doProcessControllerInput () : IAction[] {
               }
             }
           }
+        } else {
+          // Controller did not just grab
+          let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
+          if (closestEntity !== null &&
+              doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
+            //
+            closestEntity.gizmoVisuals = GIZMO_VISUALS_FLAGS.XAxis | GIZMO_VISUALS_FLAGS.YAxis | GIZMO_VISUALS_FLAGS.ZAxis; 
+          }
         }
       } else if (usedAlteration.valid) {
         // Process if controller already used!
@@ -1502,6 +1518,11 @@ function doProcessControllerInput () : IAction[] {
 }
 
 
+function clearGizmosForEntityList (entityList : IEntityList) {
+  for (let entity of entityList.entities) {
+    entity.gizmoVisuals = GIZMO_VISUALS_FLAGS.None;
+  }
+}
 
 
 let _finishedSending : boolean = true;
@@ -1519,8 +1540,17 @@ NETWORK.bind(undefined, undefined, () => {
 
     // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
+
+    clearGizmosForEntityList(STATE.entities);
+    clearGizmosForEntityList(STATE.shelf.clonableModels);
+    if (STATE.oven.currRule != null) {
+      clearGizmosForEntityList(STATE.oven.currRule.entities);
+    }
+  
+
     doProcessClockInput();
-    doProcessOvenInput();
+    const objectsInOven = determineObjectsInOven();
+    doProcessOvenInput(objectsInOven);
     const newOvenActions = doProcessControllerInput();
     if (STATE.oven.currRule != null) {
       STATE.oven.currRule.actions.push(...newOvenActions);

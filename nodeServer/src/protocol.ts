@@ -16,6 +16,16 @@ export const enum MESSAGE_TYPE {
   ControllerAttachment = 0X07
 }
 
+export const enum GIZMO_VISUALS_FLAGS {
+  None = 0X00,
+  XAxis = 0X01,
+  YAxis = 0X02,
+  ZAxis = 0X04,
+  XRing = 0X08,
+  YRing = 0X10,
+  ZRing = 0X20
+}
+
 export const enum CONTROLLER_ATTACHMENT_TYPE {
   NONE = 0X00,
   GRAB = 0X01,
@@ -90,7 +100,7 @@ export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offse
   return offset;
 }
 
-export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor) {
+export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor, gizmoVisuals : GIZMO_VISUALS_FLAGS) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
@@ -110,6 +120,7 @@ export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Bu
   offset = buf.writeUInt8(tint[1], offset, true);
   offset = buf.writeUInt8(tint[2], offset, true);
   offset = buf.writeUInt8(tint[3], offset, true);
+  offset = buf.writeInt8(gizmoVisuals, offset, true);
   return offset;
 }
 

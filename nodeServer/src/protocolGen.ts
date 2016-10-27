@@ -33,6 +33,7 @@ const TYPE_INFO = {
 , 'Quaternion': {js: 'IQuaternion', cs: 'Quaternion', len: 4*4}
 , 'Color': {js: 'IColor', cs: 'Color32', len: 4}
 , 'Bool': {js: 'boolean', cs: 'bool', len: 1}
+, 'GizmoVisuals': {js: 'GIZMO_VISUALS_FLAGS', cs: 'GizmoVisualsFlags', len: 1}
 }
 
 const MESSAGE_TYPE_IDENT = {cs: 'MessageType', js: 'messageType'}
@@ -49,6 +50,7 @@ const SCALE_IDENT = {cs: 'Scale', js: 'scale'}
 const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
 const TIME_IDENT = {cs: 'Time', js: 'time'}
 const CONTROLLER_ATTACHMENT_IDENT = {cs: 'ControllerAttachments', js: 'controllerAttachments'}
+const GIZMO_VISUALS_IDENT = {cs: 'GizmoVisuals', js: 'gizmoVisuals'}
 
 const CONTROLLER_ATTACHMENT_TYPES = [
   {cs: 'None', js: 'NONE'}
@@ -89,6 +91,16 @@ const MODEL_TYPES = [
 , {cs: 'ControllerAttachment_Pliers', js: 'CONTROLLER_ATTACHMENT_PLIERS'}
 ]
 
+const GIZMO_VISUALS_FLAG_TYPES = [
+  'None'
+, 'XAxis'
+, 'YAxis'
+, 'ZAxis'
+, 'XRing'
+, 'YRing'
+, 'ZRing'
+]
+
 const MESSAGES : IMessage[] = [
   { name: 'Position'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
@@ -125,6 +137,7 @@ const MESSAGES : IMessage[] = [
             , {ident: SCALE_IDENT, customType: 'Vector3'}
             , {ident: VISIBLE_IDENT, customType: 'Bool'}
             , {ident: TINT_IDENT, customType: 'Color'}
+            , {ident: GIZMO_VISUALS_IDENT, customType: 'GizmoVisuals'}
             ]
   }
 , { name: 'PositionRotationVelocityColor'
@@ -163,6 +176,9 @@ const MESSAGES : IMessage[] = [
 function jsWriteForType (type: string, identifier: string) {
   let output = "";
   switch (type) {
+    case 'GizmoVisuals':
+      output += `  offset = buf.writeInt8(${identifier}, offset, true);\n`
+      break;
     case 'MessageType':
       output += `  offset = buf.writeInt8(${identifier}, offset, true);\n`
       break;
@@ -229,6 +245,10 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output += "export const enum GIZMO_VISUALS_FLAGS {\n";
+  output += GIZMO_VISUALS_FLAG_TYPES.map((flagName, index) => `  ${flagName} = ${numHex((index == 0? 0 : 1<<(index-1)))}`).join(',\n');
+  output += "\n}\n\n";
+
   output += "export const enum CONTROLLER_ATTACHMENT_TYPE {\n";
   output += CONTROLLER_ATTACHMENT_TYPES.map((attachmentType, index) => `  ${attachmentType.js} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
@@ -255,10 +275,16 @@ function csReadForMessage (message: IMessage) {
 function csCreateProtocolFromMessages (messages: IMessage[]) {
   let output = "namespace Giverspace {\n";
   output += "using UnityEngine;\n\n";
+  output += "using System;\n\n";
 
   output += "public enum MessageType {\n";
   output += "  Unknown = -1,\n";
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
+  output += "\n}\n\n";
+
+  output += "[FlagsAttribute]\n";
+  output += "public enum GizmoVisualsFlags : byte {\n";
+  output += GIZMO_VISUALS_FLAG_TYPES.map((flagName, index) => `  ${flagName} = ${numHex((index == 0? 0 : 1<<(index-1)))}`).join(',\n');
   output += "\n}\n\n";
 
   output +=
@@ -291,6 +317,12 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   output +=
   `\tstatic MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   \t\tMessageType res = (MessageType)data[offset];
+  \t\toffset += 1;
+  \t\treturn res;
+  \t}
+
+  \tstatic GizmoVisualsFlags GizmoVisualsFromBuff (byte[] data, ref int offset) {
+  \t\tGizmoVisualsFlags res = (GizmoVisualsFlags)data[offset];
   \t\toffset += 1;
   \t\treturn res;
   \t}

@@ -78,7 +78,7 @@ public class MessageHandler : MonoBehaviour {
             if (_models[message.ObjectId] == null) {
                 _models[message.ObjectId] = (Instantiate(_modelPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<Model>();
             }
-            _models[message.ObjectId].UpdateData(message.ModelType, message.Position, message.Rotation, message.Scale, message.Tint, message.Visible);
+            _models[message.ObjectId].UpdateData(message.ModelType, message.Position, message.Rotation, message.Scale, message.Tint, message.Visible, message.GizmoVisuals);
         }
     }
 
