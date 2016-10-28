@@ -55,11 +55,14 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
+const X_VECTOR3 = Vec3.fromValues(1,0,0);
+const Y_VECTOR3 = Vec3.fromValues(0,1,0);
+const Z_VECTOR3 = Vec3.fromValues(0,0,1);
 const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
 const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
 const IDENT_QUAT = Quat.create();
@@ -866,6 +869,7 @@ interface IControllerMetadata {
 interface IAlterationMove extends IAlteration {
   entity: IEntity;
   controllerMetadata: IControllerMetadata;
+  constraint: GIZMO_VISUALS_FLAGS;
 }
 
 interface IAlterationDelete extends IAlteration {
@@ -921,17 +925,18 @@ function makeControllerMetadataFromEntityInEntityListAndController (entity : IEn
   };
 }
 
-function makeMoveAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationMove {
+function makeMoveAlteration (entity : IEntity, controller : IController, movementConstraint : GIZMO_VISUALS_FLAGS, entitiesList : IEntityList) : IAlterationMove {
   return {
     type: ALTERATION_TYPE.MOVE
   , valid: true
   , entitiesList: entitiesList
   , entity: entity
   , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
+  , constraint: movementConstraint
   };
 }
 
-function makeDeleteAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationMove {
+function makeDeleteAlteration (entity : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationDelete {
   return {
     type: ALTERATION_TYPE.DELETE
   , valid: true
@@ -1484,6 +1489,29 @@ function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]
   return matchingAlterations;
 }
 
+function displaceAlongFromToRotation (entityToRotate : IEntity, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
+  const targetRotation = Quat.rotationTo(Quat.create(), inputTargetFromDir, inputTargetToDir);
+  // console.log(`targetRot: X${targetRotation[0]} Y${targetRotation[1]} Z${targetRotation[2]} W${targetRotation[3]}`)
+  // Swing - Twist Decomposition (see http://www.alinenormoyle.com/weblog/?p=726)
+  const targetRotationVector = Vec3.fromValues(targetRotation[0], targetRotation[1], targetRotation[2]);
+  const targetRotationScalar = targetRotation[3];
+  const projection = Vec3.scale(Vec3.create(), axis, Vec3.dot(targetRotationVector, axis));
+  // console.log(`projection: X${projection[0]} Y${projection[1]} Z${projection[2]}`)
+  const rotAroundAxis = Quat.fromValues(projection[0], projection[1], projection[2], targetRotationScalar); // "Twist" Rotation, not normalized
+  // console.log(`preNorm: X${rotAroundAxis[0]} Y${rotAroundAxis[1]} Z${rotAroundAxis[2]} W${rotAroundAxis[3]}`)
+  Quat.normalize(rotAroundAxis, rotAroundAxis);
+  // console.log(`postNorm: X${rotAroundAxis[0]} Y${rotAroundAxis[1]} Z${rotAroundAxis[2]} W${rotAroundAxis[3]}`)
+
+  Quat.mul(entityToRotate.rot, startRot, rotAroundAxis);
+}
+
+function displaceAlongAxis (entityToMove : IEntity, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
+  const targetAxis = Vec3.transformQuat(/*out*/Vec3.create(), axis, startRot);
+  const targetPosVector = Vec3.sub(/*out*/Vec3.create(), inputTargetPos, startPos);
+  const displacementMagnitude = Vec3.dot(targetPosVector, targetAxis);
+  Vec3.scaleAndAdd(/*out*/entityToMove.pos, startPos, targetAxis, displacementMagnitude);
+}
+
 function doProcessControllerInput () : IAction[] {
   const newOvenActions : IAction[] = [];
   const newInProgressAlterations : IAlteration[] = [];
@@ -1496,47 +1524,46 @@ function doProcessControllerInput () : IAction[] {
   for (let [client, inputData] of STATE.inputData) {
     let controllers = inputData.controllers;
     for (let controller of controllers) {
+
+      let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
+      const overlapsClosest = closestEntity !== null &&
+                              doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot);
+      let gizmoFlags = GIZMO_VISUALS_FLAGS.None;
+      if (overlapsClosest && controller.attachment === CONTROLLER_ATTACHMENT_TYPE.GRAB) {
+        gizmoFlags = gizmoFlagsForEntityGivenController(closestEntity, sourceList, controller);
+        closestEntity.gizmoVisuals = gizmoFlags; 
+      }
+
       const usedAlteration = alterationThatUsesController(controller, STATE.inProgressAlterations);
       if (usedAlteration === null) {
         // Process if controller not used!
         if (didControllerJustGrab(controller)) {
-          let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
-          if (closestEntity !== null) {
-            if (doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
-              
-              // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
-              const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
-              for (let alt of alterationsUsingClosestEntity) {
-                alt.valid = false;
-              }
-
-              switch (controller.attachment) {
-                case CONTROLLER_ATTACHMENT_TYPE.GRAB:
-                  if (sourceList === ovenEntities) {
-                    console.log("MAKING OVEN ALTERATION");
-                  }
-                  if (sourceList === shelfEntities) {
-                    closestEntity = cloneEntity(closestEntity);
-                    applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
-                    sourceList = worldEntities;
-                    worldEntities.entities.push(closestEntity);
-                  }
-                  newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, sourceList));
-                  break;
-                case CONTROLLER_ATTACHMENT_TYPE.DELETE:
-                  if (sourceList !== shelfEntities) {
-                    newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
-                  }
-                  break;
-              }
+          if (overlapsClosest) {
+            // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
+            const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
+            for (let alt of alterationsUsingClosestEntity) {
+              alt.valid = false;
             }
-          }
-        } else {
-          // Controller did not just grab
-          let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
-          if (closestEntity !== null &&
-              doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot)) {
-            closestEntity.gizmoVisuals = gizmoFlagsForEntityGivenController(closestEntity, sourceList, controller); 
+
+            switch (controller.attachment) {
+              case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+                if (sourceList === ovenEntities) {
+                  console.log("MAKING OVEN ALTERATION");
+                }
+                if (sourceList === shelfEntities) {
+                  closestEntity = cloneEntity(closestEntity);
+                  applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
+                  sourceList = worldEntities;
+                  worldEntities.entities.push(closestEntity);
+                }
+                newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList));
+                break;
+              case CONTROLLER_ATTACHMENT_TYPE.DELETE:
+                if (sourceList !== shelfEntities) {
+                  newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
+                }
+                break;
+            }
           }
         }
       } else if (usedAlteration.valid) {
@@ -1548,13 +1575,60 @@ function doProcessControllerInput () : IAction[] {
 
             const controllerPos = _tempVec;
             const controllerRot = _tempQuat;
-            applyInverseOffsetToPosRot(controllerPos, controllerRot, controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
+            applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
+                                      , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
 
-            Vec3.add(/*out*/entityToMove.pos
-                    , controllerPos, Vec3.transformQuat(/*out*/entityToMove.pos
-                                                        , controllerMetadata.offsetPos, controllerRot));
+            
+            const entityTargetPos = Vec3.create();
+            Vec3.add(/*out*/entityTargetPos
+                    , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
+                                                       , controllerMetadata.offsetPos, controllerRot));
 
-            Quat.mul(/*out*/entityToMove.rot, controllerRot, controllerMetadata.offsetRot);
+            // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
+            // offsetRot = Quat.invert(controllerRot) * entity.rot
+
+            const oldControllerRot = Quat.create();
+            const oldControllerPos = Vec3.create();
+            Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
+            Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+
+            const oldDir = Vec3.create(); 
+            Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+            Vec3.normalize(/*out*/oldDir, oldDir);
+            const newDir = Vec3.create(); 
+            Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+            Vec3.normalize(/*out*/newDir, newDir);
+
+            const constraint = (<IAlterationMove>usedAlteration).constraint;
+            switch (constraint) {
+              case GIZMO_VISUALS_FLAGS.XAxis:
+                displaceAlongAxis(/*modified*/entityToMove, X_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                break;
+              case GIZMO_VISUALS_FLAGS.YAxis:
+                displaceAlongAxis(/*modified*/entityToMove, Y_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                break;
+              case GIZMO_VISUALS_FLAGS.ZAxis:
+                displaceAlongAxis(/*modified*/entityToMove, Z_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                break;
+              case GIZMO_VISUALS_FLAGS.XRing:
+                displaceAlongFromToRotation(entityToMove, X_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                break;
+              case GIZMO_VISUALS_FLAGS.YRing:
+                displaceAlongFromToRotation(entityToMove, Y_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                break;
+              case GIZMO_VISUALS_FLAGS.ZRing:
+                displaceAlongFromToRotation(entityToMove, Z_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                break;
+              default:
+                const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
+                Vec3.copy(/*out*/entityToMove.pos, entityTargetPos);
+                Quat.copy(/*out*/entityToMove.rot, entityTargetRot);
+              break;
+            }
+
+
+            entityToMove.gizmoVisuals = constraint;
+
             
             if (didControllerJustRelease(controller)) {
               // DELETE this alteration; make a new action for it...
