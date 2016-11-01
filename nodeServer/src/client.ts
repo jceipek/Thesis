@@ -474,24 +474,71 @@ function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) :
 }
 
 function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IActionMoveBy {
-  let endPos = Vec3.clone(moveAlteration.controllerMetadata.controller.pos);
-  let endRot = Quat.clone(moveAlteration.controllerMetadata.controller.rot);
-  applyInverseOffsetToPosRot(endPos, endRot, endPos, endRot, moveAlteration.entitiesList.offsetPos, moveAlteration.entitiesList.offsetRot);
-  Vec3.add(/*out*/endPos
-          , endPos, Vec3.transformQuat(/*out*/Vec3.create()
-                                              , moveAlteration.controllerMetadata.offsetPos, endRot));
+  const controllerPos = moveAlteration.controllerMetadata.controller.pos;
+  const controllerRot = moveAlteration.controllerMetadata.controller.rot;
+  let entityTargetPos = Vec3.clone(controllerPos);
+  let entityTargetRot = Quat.clone(controllerRot);
+  applyInverseOffsetToPosRot(entityTargetPos, entityTargetRot, entityTargetPos, entityTargetRot, moveAlteration.entitiesList.offsetPos, moveAlteration.entitiesList.offsetRot);
+  Vec3.add(/*out*/entityTargetPos
+          , entityTargetPos, Vec3.transformQuat(/*out*/Vec3.create()
+                                              , moveAlteration.controllerMetadata.offsetPos, entityTargetRot));
 
-  Quat.mul(/*out*/endRot, endRot, moveAlteration.controllerMetadata.offsetRot);
+  Quat.mul(/*out*/entityTargetRot, entityTargetRot, moveAlteration.controllerMetadata.offsetRot);
 
-  let startPos = moveAlteration.controllerMetadata.entityStartPos;
-  let startRot = moveAlteration.controllerMetadata.entityStartRot;
+  let entityStartPos = moveAlteration.controllerMetadata.entityStartPos;
+  let entityStartRot = moveAlteration.controllerMetadata.entityStartRot;
+
+  const controllerMetadata = moveAlteration.controllerMetadata;
+
+
+  const oldControllerRot = Quat.create();
+  const oldControllerPos = Vec3.create();
+  Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
+  Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+
+  const oldDir = Vec3.create(); 
+  Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+  Vec3.normalize(/*out*/oldDir, oldDir);
+  const newDir = Vec3.create(); 
+  Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+  Vec3.normalize(/*out*/newDir, newDir);
+
+  const constraint = moveAlteration.constraint;
+  switch (constraint) {
+    case GIZMO_VISUALS_FLAGS.XAxis:
+      displaceAlongAxis(/*modified*/entityTargetPos, X_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
+      Quat.copy(/*out*/entityTargetRot, entityStartRot);
+      break;
+    case GIZMO_VISUALS_FLAGS.YAxis:
+      displaceAlongAxis(/*modified*/entityTargetPos, Y_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
+      Quat.copy(/*out*/entityTargetRot, entityStartRot);
+      break;
+    case GIZMO_VISUALS_FLAGS.ZAxis:
+      displaceAlongAxis(/*modified*/entityTargetPos, Z_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
+      Quat.copy(/*out*/entityTargetRot, entityStartRot);
+      break;
+    case GIZMO_VISUALS_FLAGS.XRing:
+      displaceAlongFromToRotation(/*modified*/entityTargetRot, X_VECTOR3, entityStartRot, oldDir, newDir);
+      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
+      break;
+    case GIZMO_VISUALS_FLAGS.YRing:
+      displaceAlongFromToRotation(/*modified*/entityTargetRot, Y_VECTOR3, entityStartRot, oldDir, newDir);
+      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
+      break;
+    case GIZMO_VISUALS_FLAGS.ZRing:
+      displaceAlongFromToRotation(/*modified*/entityTargetRot, Z_VECTOR3, entityStartRot, oldDir, newDir);
+      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
+      break;
+    default:
+      break;
+  }
 
   const deltaPos = Vec3.create(); 
   const deltaRot = Quat.create();
-  Vec3.sub(/*out*/deltaPos, endPos, startPos);
-  Quat.invert(/*out*/deltaRot, startRot);
+  Vec3.sub(/*out*/deltaPos, entityTargetPos, entityStartPos);
+  Quat.invert(/*out*/deltaRot, entityStartRot);
   Vec3.transformQuat(/*out*/deltaPos, deltaPos, deltaRot);
-  Quat.mul(/*out*/deltaRot, endRot, deltaRot);
+  Quat.mul(/*out*/deltaRot, entityTargetRot, deltaRot);
 
   return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
                         , entity: moveAlteration.entity
@@ -788,18 +835,19 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
   const ovenCancelButtonModel = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
   buttonModels.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButtonModel);
   ovenModel.children.entities.push(ovenCancelButtonModel);
-  const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
-  buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButtonModel);
-  ovenModel.children.entities.push(ovenStepBackButtonModel);
-  const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
-  buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
-  ovenModel.children.entities.push(ovenStepForwardButtonModel);
+  // const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+  // buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButtonModel);
+  // ovenModel.children.entities.push(ovenStepBackButtonModel);
+  // const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+  // buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
+  // ovenModel.children.entities.push(ovenStepForwardButtonModel);
 
   return { model: ovenModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
                                                            , [MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
+                                                           /*, [MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, {curr: 0, last: 0}]
+                                                             , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]*/
+                                                           ])
          , buttonModels: buttonModels
          , rules: []
          , actionIndex: -1
@@ -1231,7 +1279,7 @@ function determineObjectsInOven () {
 }
 
 function doProcessOvenInput (objectsInOven : IEntity[]) {
-  const buttonTypes = [ MODEL_TYPE.OVEN_CANCEL_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON ];
+  const buttonTypes = [ MODEL_TYPE.OVEN_CANCEL_BUTTON /*, MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON*/ ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
   for (let [client, inputData] of STATE.inputData) {
@@ -1290,19 +1338,19 @@ function doProcessOvenInput (objectsInOven : IEntity[]) {
     STATE.oven.actionIndex = -1;
   }
 
-  const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
-  if (stepBackState.curr === 1 && stepBackState.last === 0 && STATE.oven.currRule !== null) {
-    if (STATE.oven.actionIndex - 1 >= -1 && STATE.oven.actionIndex - 1 < STATE.oven.currRule.actions.length) {
-      STATE.oven.actionIndex--;
-    }
-  }
+  // const stepBackState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON); 
+  // if (stepBackState.curr === 1 && stepBackState.last === 0 && STATE.oven.currRule !== null) {
+  //   if (STATE.oven.actionIndex - 1 >= -1 && STATE.oven.actionIndex - 1 < STATE.oven.currRule.actions.length) {
+  //     STATE.oven.actionIndex--;
+  //   }
+  // }
 
-  const stepForwardState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON); 
-  if (stepForwardState.curr === 1 && stepForwardState.last === 0 && STATE.oven.currRule !== null) {
-    if (STATE.oven.actionIndex + 1 >= -1 && STATE.oven.actionIndex + 1 < STATE.oven.currRule.actions.length) {
-      STATE.oven.actionIndex++;
-    }
-  }
+  // const stepForwardState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON); 
+  // if (stepForwardState.curr === 1 && stepForwardState.last === 0 && STATE.oven.currRule !== null) {
+  //   if (STATE.oven.actionIndex + 1 >= -1 && STATE.oven.actionIndex + 1 < STATE.oven.currRule.actions.length) {
+  //     STATE.oven.actionIndex++;
+  //   }
+  // }
 
   for (let type of buttonTypes) {
     const state = STATE.oven.buttonStates.get(type);
@@ -1333,12 +1381,12 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
   }
 }
 
-function performSimulationForRuleWith1Cond (entityList : IEntityList, rule : IRule) {
+function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const cond = rule.conditions[0];
   if (cond.type === CONDITION_TYPE.PRESENT) {
     const eType = (<IConditionPresent>cond).entity.type;
     for (let entity of entityList.entities) {
-      if (entity.type === entity.type) {
+      if (entity.type === eType && !excludeIds.has(entity.id)) {
         for (let action of rule.actions) {
           performActionOnEntity(action, entity);
         }
@@ -1347,7 +1395,7 @@ function performSimulationForRuleWith1Cond (entityList : IEntityList, rule : IRu
   }
 }
 
-function performSimulationForRuleWith2Cond (entityList : IEntityList, rule : IRule) {
+function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
 
   const hash = unordered2EntityHash(presentConds[0].entity, presentConds[1].entity);
@@ -1357,6 +1405,9 @@ function performSimulationForRuleWith2Cond (entityList : IEntityList, rule : IRu
     for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
       let e1 = entities[e1Index];
       let e2 = entities[e2Index];
+      if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
+        continue;
+      }
       if (unordered2EntityHash(e1, e2) === hash) {
         if (e1.type !== presentConds[0].entity.type) {
           const temp = e1;
@@ -1380,7 +1431,7 @@ function performSimulationForRuleWith2Cond (entityList : IEntityList, rule : IRu
   }
 }
 
-function performSimulationForRuleWith3Cond (entityList : IEntityList, rule : IRule) {
+function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
 
@@ -1391,6 +1442,9 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, rule : IRu
     for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
       let e1 = entities[e1Index];
       let e2 = entities[e2Index];
+      if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
+        continue;
+      }
       if (unordered2EntityHash(e1, e2) === hash &&
           doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
         if (e1.type !== intersectCond.entityA.type) {
@@ -1415,17 +1469,17 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, rule : IRu
   }
 }
 
-function performSimulation (entityList : IEntityList, rules : IRule[]) {
+function performSimulation (entityList : IEntityList, excludeIds : Set<number>, rules : IRule[]) {
   for (let rule of rules) {
     if (rule.actions.length == 0) {
       continue; // Short circuit checking
     }
     if (rule.conditions.length === 1) {
-      performSimulationForRuleWith1Cond(entityList, rule);
+      performSimulationForRuleWith1Cond(entityList, excludeIds, rule);
     } else if (rule.conditions.length === 2) {
-      //performSimulationForRuleWith2Cond(entityList, rule);
+      //performSimulationForRuleWith2Cond(entityList, excludeIds, rule);
     } else if (rule.conditions.length === 3) {
-      performSimulationForRuleWith3Cond(entityList, rule);
+      performSimulationForRuleWith3Cond(entityList, excludeIds, rule);
     } else {
       console.log(`Unable to handle rule with ${rule.conditions.length} conditions!`);
     }
@@ -1489,7 +1543,7 @@ function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]
   return matchingAlterations;
 }
 
-function displaceAlongFromToRotation (entityToRotate : IEntity, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
+function displaceAlongFromToRotation (outRot : IQuaternion, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
   const targetRotation = Quat.rotationTo(Quat.create(), inputTargetFromDir, inputTargetToDir);
   // console.log(`targetRot: X${targetRotation[0]} Y${targetRotation[1]} Z${targetRotation[2]} W${targetRotation[3]}`)
   // Swing - Twist Decomposition (see http://www.alinenormoyle.com/weblog/?p=726)
@@ -1502,14 +1556,14 @@ function displaceAlongFromToRotation (entityToRotate : IEntity, axis : IVector3,
   Quat.normalize(rotAroundAxis, rotAroundAxis);
   // console.log(`postNorm: X${rotAroundAxis[0]} Y${rotAroundAxis[1]} Z${rotAroundAxis[2]} W${rotAroundAxis[3]}`)
 
-  Quat.mul(entityToRotate.rot, startRot, rotAroundAxis);
+  Quat.mul(/*out*/outRot, startRot, rotAroundAxis);
 }
 
-function displaceAlongAxis (entityToMove : IEntity, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
+function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
   const targetAxis = Vec3.transformQuat(/*out*/Vec3.create(), axis, startRot);
   const targetPosVector = Vec3.sub(/*out*/Vec3.create(), inputTargetPos, startPos);
   const displacementMagnitude = Vec3.dot(targetPosVector, targetAxis);
-  Vec3.scaleAndAdd(/*out*/entityToMove.pos, startPos, targetAxis, displacementMagnitude);
+  Vec3.scaleAndAdd(/*out*/outPos, startPos, targetAxis, displacementMagnitude);
 }
 
 function doProcessControllerInput () : IAction[] {
@@ -1602,22 +1656,22 @@ function doProcessControllerInput () : IAction[] {
             const constraint = (<IAlterationMove>usedAlteration).constraint;
             switch (constraint) {
               case GIZMO_VISUALS_FLAGS.XAxis:
-                displaceAlongAxis(/*modified*/entityToMove, X_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                displaceAlongAxis(/*modified*/entityToMove.pos, X_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
                 break;
               case GIZMO_VISUALS_FLAGS.YAxis:
-                displaceAlongAxis(/*modified*/entityToMove, Y_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                displaceAlongAxis(/*modified*/entityToMove.pos, Y_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
                 break;
               case GIZMO_VISUALS_FLAGS.ZAxis:
-                displaceAlongAxis(/*modified*/entityToMove, Z_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+                displaceAlongAxis(/*modified*/entityToMove.pos, Z_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
                 break;
               case GIZMO_VISUALS_FLAGS.XRing:
-                displaceAlongFromToRotation(entityToMove, X_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                displaceAlongFromToRotation(entityToMove.rot, X_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
                 break;
               case GIZMO_VISUALS_FLAGS.YRing:
-                displaceAlongFromToRotation(entityToMove, Y_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                displaceAlongFromToRotation(entityToMove.rot, Y_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
                 break;
               case GIZMO_VISUALS_FLAGS.ZRing:
-                displaceAlongFromToRotation(entityToMove, Z_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+                displaceAlongFromToRotation(entityToMove.rot, Z_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
                 break;
               default:
                 const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
@@ -1707,8 +1761,13 @@ NETWORK.bind(undefined, undefined, () => {
       STATE.oven.actionIndex += newOvenActions.length;
     }
 
+    const excludeSet = new Set<number>();
+    for (let entity of objectsInOven) {
+      excludeSet.add(entity.id);
+    }
+
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
-      performSimulation(STATE.entities, STATE.oven.rules);
+      performSimulation(STATE.entities, excludeSet, STATE.oven.rules);
       STATE.simulationTime += 1/FPS;
     }
     if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
