@@ -3,12 +3,12 @@ import * as Protocol from './protocol'
 import * as FS from 'fs'
 import * as Promise from 'bluebird'
 import * as DGRAM from 'dgram'
-import { vec3 as Vec3, quat as Quat, GLM } from 'gl-matrix'
+import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
 import * as SH from './spatialHash'
 import { ISpatialHash } from './spatialHash'
 
-type IVector3 = GLM.IArray;
-type IQuaternion = GLM.IArray;
+type IVector3 = Vec3;
+type IQuaternion = Quat;
 type IColor = Uint8Array;
 
 interface IEntity {
@@ -55,8 +55,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -339,10 +339,10 @@ interface IController {
   pickedUpObject: IEntity|null;
   pickedUpObjectTime: Date;
   pickedUpObjectOffset: IVector3;
-  pickedUpObjectRotOffset: IVector3;
+  pickedUpObjectRotOffset: IQuaternion;
 
   pickedUpObjectPos: IVector3;
-  pickedUpObjectRot: IVector3;
+  pickedUpObjectRot: IQuaternion;
 
   attachment: CONTROLLER_ATTACHMENT_TYPE;
 }

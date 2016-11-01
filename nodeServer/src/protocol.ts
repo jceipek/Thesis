@@ -1,7 +1,7 @@
-import { vec3 as Vec3, quat as Quat, GLM } from "gl-matrix"
+import { vec3 as Vec3, quat as Quat } from "gl-matrix"
 
-type IVector3 = GLM.IArray;
-type IQuaternion = GLM.IArray;
+type IVector3 = Vec3;
+type IQuaternion = Quat;
 type IColor = Uint8Array;
 
 export const enum MESSAGE_TYPE {

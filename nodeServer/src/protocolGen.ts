@@ -234,10 +234,10 @@ function numHex(s) {
 }
 
 function jsCreateProtocolFromMessages (messages: IMessage[]) {
-  let output = `import { vec3 as Vec3, quat as Quat, GLM } from "gl-matrix"\n\n`
+  let output = `import { vec3 as Vec3, quat as Quat } from "gl-matrix"\n\n`
 
-  output += `type IVector3 = GLM.IArray;\n`;
-  output += `type IQuaternion = GLM.IArray;\n`;
+  output += `type IVector3 = Vec3;\n`;
+  output += `type IQuaternion = Quat;\n`;
   output += `type IColor = Uint8Array;\n\n`;
 
   output += "export const enum MESSAGE_TYPE {\n";
