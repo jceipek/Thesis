@@ -1,5 +1,8 @@
-﻿using UnityEngine;
-using UnityEditor;
+﻿namespace Giverspace
+{
+
+using UnityEngine;
+// using UnityEditor;
 
 public class ArrowMesh : MonoBehaviour {
 	[SerializeField] MeshFilter _meshFilter;
@@ -253,7 +256,9 @@ public class ArrowMesh : MonoBehaviour {
 		Debug.DrawLine(pos + Vector3.forward * scale/2f, pos - Vector3.forward * scale/2f);
 	}
 
-	void DrawLabel (Vector3 pos, int index) {
-		Handles.Label( pos, index.ToString());
-	}
+	// void DrawLabel (Vector3 pos, int index) {
+	// 	Handles.Label( pos, index.ToString());
+	// }
+}
+
 }

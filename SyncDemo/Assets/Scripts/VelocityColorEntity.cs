@@ -1,4 +1,7 @@
-﻿using UnityEngine;
+﻿namespace Giverspace
+{
+
+using UnityEngine;
 
 public class VelocityColorEntity : MonoBehaviour {
 	[SerializeField] Renderer _renderer;
@@ -17,4 +20,6 @@ public class VelocityColorEntity : MonoBehaviour {
 		// _lineSegment.StartPoint = Vector3.zero;
 		// _lineSegment.EndPoint = vel;
 	}
+}
+
 }
