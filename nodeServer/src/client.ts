@@ -1076,11 +1076,12 @@ function getInitialState () : IState {
     , inProgressAlterations: []
     // , latestEntityId: 0
     , segments: [
-                 makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // green
-               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // blue
-               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // red
-               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF]))
-               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF]))
+                 makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0xFF,0x00,0xFF])) // [0]green
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0x00,0x00,0xFF,0xFF])) // [1]blue
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0x00,0xFF])) // [2]red
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0x00,0xFF])) // [3]yellow
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0xFF,0xFF,0xFF])) // [4]white
+               , makeSegment(Vec3.create(), Vec3.create(), new Uint8Array([0xFF,0x00,0xFF,0xFF])) // [5]purple
                ]
     };
 
@@ -1543,20 +1544,28 @@ function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]
   return matchingAlterations;
 }
 
-function displaceAlongFromToRotation (outRot : IQuaternion, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
-  const targetRotation = Quat.rotationTo(Quat.create(), inputTargetFromDir, inputTargetToDir);
-  // console.log(`targetRot: X${targetRotation[0]} Y${targetRotation[1]} Z${targetRotation[2]} W${targetRotation[3]}`)
-  // Swing - Twist Decomposition (see http://www.alinenormoyle.com/weblog/?p=726)
-  const targetRotationVector = Vec3.fromValues(targetRotation[0], targetRotation[1], targetRotation[2]);
-  const targetRotationScalar = targetRotation[3];
-  const projection = Vec3.scale(Vec3.create(), axis, Vec3.dot(targetRotationVector, axis));
-  // console.log(`projection: X${projection[0]} Y${projection[1]} Z${projection[2]}`)
-  const rotAroundAxis = Quat.fromValues(projection[0], projection[1], projection[2], targetRotationScalar); // "Twist" Rotation, not normalized
-  // console.log(`preNorm: X${rotAroundAxis[0]} Y${rotAroundAxis[1]} Z${rotAroundAxis[2]} W${rotAroundAxis[3]}`)
-  Quat.normalize(rotAroundAxis, rotAroundAxis);
-  // console.log(`postNorm: X${rotAroundAxis[0]} Y${rotAroundAxis[1]} Z${rotAroundAxis[2]} W${rotAroundAxis[3]}`)
+function projectVectorOntoPlane (outVec: IVector3, inVec: IVector3, unitPlaneNormal : IVector3) {    
+  // Projecting inVec onto the plane formed by unitPlaneNormal by subtracting the projection of inVec onto unitPlaneNormal from inVec
+  Vec3.sub(/*out*/outVec
+          , inVec
+          , Vec3.scale(/*out*/outVec
+                      , unitPlaneNormal
+                      , Vec3.dot(inVec, unitPlaneNormal)));
+}
 
-  Quat.mul(/*out*/outRot, startRot, rotAroundAxis);
+function displaceAlongFromToRotation (outRot : IQuaternion, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
+  const targetAxis = Vec3.transformQuat(/*out*/Vec3.create(), axis, startRot);
+
+  const fromVec = Vec3.create();
+  projectVectorOntoPlane(/*out*/fromVec, inputTargetFromDir, targetAxis);
+  Vec3.normalize(/*out*/fromVec, fromVec);
+  
+  const toVec = Vec3.create();
+  projectVectorOntoPlane(/*out*/toVec, inputTargetToDir, targetAxis);
+  Vec3.normalize(/*out*/toVec, toVec);
+
+  const displacement = Quat.rotationTo(/*out*/Quat.create(), fromVec, toVec);
+  Quat.mul(/*out*/outRot, displacement, startRot);
 }
 
 function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
@@ -1737,7 +1746,8 @@ NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
   _interval = setInterval(() => {
 
-    let DEBUG_start_sending = process.hrtime();
+
+    let DEBUG_start_compute = process.hrtime();
 
     // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
     // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
@@ -1784,9 +1794,11 @@ NETWORK.bind(undefined, undefined, () => {
     //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
     // }
 
+    let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
     if (!_finishedSending) {
       _framesDroppedPerSecond++;      
     } else {
+      let DEBUG_start_sending = process.hrtime();
       // TRANSFER STATE
       _finishedSending = false;
       sendSimulationTimePromise(STATE.simulationTime).then(() => {
@@ -1812,7 +1824,9 @@ NETWORK.bind(undefined, undefined, () => {
                 // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
                 Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
-                  let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+                  let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+                  // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
+                  // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
                 });
 
                 _finishedSending = true;
