@@ -491,12 +491,29 @@ function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) :
          , entity: deleteAlteration.entity};
 }
 
+function vectorConstFromGizmoFlag (flag : GIZMO_VISUALS_FLAGS) {
+  switch (flag) {
+    case GIZMO_VISUALS_FLAGS.XAxis:
+    case GIZMO_VISUALS_FLAGS.XRing:
+      return X_VECTOR3;
+    case GIZMO_VISUALS_FLAGS.YAxis:
+    case GIZMO_VISUALS_FLAGS.YRing:
+      return Y_VECTOR3;
+    case GIZMO_VISUALS_FLAGS.ZAxis:
+    case GIZMO_VISUALS_FLAGS.ZRing:
+      return Z_VECTOR3;
+    default:
+      console.error(`Flag ${flag} is unhandled!`)
+  }
+}
+
 function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IActionMoveBy {
   const controllerPos = moveAlteration.controllerMetadata.controller.pos;
   const controllerRot = moveAlteration.controllerMetadata.controller.rot;
   let entityTargetPos = Vec3.clone(controllerPos);
   let entityTargetRot = Quat.clone(controllerRot);
   applyInverseOffsetToPosRot(entityTargetPos, entityTargetRot, entityTargetPos, entityTargetRot, moveAlteration.entitiesList.offsetPos, moveAlteration.entitiesList.offsetRot);
+  Vec3.copy(controllerPos, entityTargetPos);
   Vec3.add(/*out*/entityTargetPos
           , entityTargetPos, Vec3.transformQuat(/*out*/Vec3.create()
                                               , moveAlteration.controllerMetadata.offsetPos, entityTargetRot));
@@ -524,29 +541,21 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
   const constraint = moveAlteration.constraint;
   switch (constraint) {
     case GIZMO_VISUALS_FLAGS.XAxis:
-      displaceAlongAxis(/*modified*/entityTargetPos, X_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
-      Quat.copy(/*out*/entityTargetRot, entityStartRot);
-      break;
     case GIZMO_VISUALS_FLAGS.YAxis:
-      displaceAlongAxis(/*modified*/entityTargetPos, Y_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
-      Quat.copy(/*out*/entityTargetRot, entityStartRot);
-      break;
     case GIZMO_VISUALS_FLAGS.ZAxis:
-      displaceAlongAxis(/*modified*/entityTargetPos, Z_VECTOR3, entityStartPos, entityStartRot, entityTargetPos);
-      Quat.copy(/*out*/entityTargetRot, entityStartRot);
-      break;
+      displaceAlongAxisDelta(/*modified*/entityTargetPos, vectorConstFromGizmoFlag(constraint), entityStartPos, entityStartRot, entityTargetPos);
+      return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
+                            , entity: moveAlteration.entity
+                            , posOffset: entityTargetPos
+                            , rotOffset: Quat.create() };
     case GIZMO_VISUALS_FLAGS.XRing:
-      displaceAlongFromToRotation(/*modified*/entityTargetRot, X_VECTOR3, entityStartRot, oldDir, newDir);
-      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
-      break;
     case GIZMO_VISUALS_FLAGS.YRing:
-      displaceAlongFromToRotation(/*modified*/entityTargetRot, Y_VECTOR3, entityStartRot, oldDir, newDir);
-      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
-      break;
     case GIZMO_VISUALS_FLAGS.ZRing:
-      displaceAlongFromToRotation(/*modified*/entityTargetRot, Z_VECTOR3, entityStartRot, oldDir, newDir);
-      Vec3.copy(/*out*/entityTargetPos, entityStartPos);
-      break;
+      displaceAlongFromToRotationDelta(/*modified*/entityTargetRot, vectorConstFromGizmoFlag(constraint), entityStartRot, oldDir, newDir);
+      return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
+                            , entity: moveAlteration.entity
+                            , posOffset: Vec3.create()
+                            , rotOffset: entityTargetRot };
     default:
       break;
   }
@@ -821,23 +830,23 @@ function makeClock (pos : IVector3, rot : IQuaternion) : IClock {
   const buttonModels = new Map<MODEL_TYPE, IEntity>();
 
   const clockModel = makeModel(pos, rot, MODEL_TYPE.CLOCK);
-  const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
-  buttonModels.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
-  clockModel.children.entities.push(freezeStateButton);
+  // const freezeStateButton = makeModel(Vec3.fromValues(0.3184903,1.474535,0.02016843), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON);
+  // buttonModels.set(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, freezeStateButton);
+  // clockModel.children.entities.push(freezeStateButton);
   const playPauseButton = makeModel(Vec3.fromValues(-0.08278675,1.095961,0.1116587), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, playPauseButton);
   clockModel.children.entities.push(playPauseButton);
-  const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
-  buttonModels.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
-  clockModel.children.entities.push(resetStateButton);
+  // const resetStateButton = makeModel(Vec3.fromValues(0.2392679,1.095961,0.09027994), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_RESET_STATE_BUTTON);
+  // buttonModels.set(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, resetStateButton);
+  // clockModel.children.entities.push(resetStateButton);
   const singleStepButton = makeModel(Vec3.fromValues(-0.32076,1.095961,0.09027993), Quat.clone(CLOCK_BUTTON_BASE_ROT), MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON);
   buttonModels.set(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, singleStepButton);
   clockModel.children.entities.push(singleStepButton);
 
   return { model: clockModel
-         , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]
-                                                           , [MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, {curr: 0, last: 0}]
+         , buttonStates: new Map<MODEL_TYPE, IButtonState>([ /*[MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON, {curr: 0, last: 0}]
+                                                           ,*/ [MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, {curr: 0, last: 0}]
+                                                           /*, [MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, {curr: 0, last: 0}]*/
                                                            , [MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, {curr: 0, last: 0}]])
          , buttonModels: buttonModels };
 }
@@ -1219,7 +1228,7 @@ function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : I
 }
 
 function doProcessClockInput () {
-  const buttonTypes = [ MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, MODEL_TYPE.CLOCK_RESET_STATE_BUTTON, MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON ];
+  const buttonTypes = [ MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, /*MODEL_TYPE.CLOCK_RESET_STATE_BUTTON,*/ MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON /*, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON*/ ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
   for (let [client, inputData] of STATE.inputData) {
@@ -1258,21 +1267,21 @@ function doProcessClockInput () {
       Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
   }
 
-  const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
-  if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
-      STATE.simulationTime = 0;
-      STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
-      saveEntitiesToStoredEntities(STATE);
-  }
+  // const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
+  // if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
+  //     STATE.simulationTime = 0;
+  //     STATE.simulating = SIMULATION_TYPE.PAUSED;
+  //     Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+  //     saveEntitiesToStoredEntities(STATE);
+  // }
 
-  const resetStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON); 
-  if (resetStateState.curr === 1 && resetStateState.last === 0) {
-      STATE.simulationTime = 0;
-      STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
-      restoreEntitiesFromStoredEntities(STATE);
-  }
+  // const resetStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_RESET_STATE_BUTTON); 
+  // if (resetStateState.curr === 1 && resetStateState.last === 0) {
+  //     STATE.simulationTime = 0;
+  //     STATE.simulating = SIMULATION_TYPE.PAUSED;
+  //     Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+  //     restoreEntitiesFromStoredEntities(STATE);
+  // }
 
   for (let type of buttonTypes) {
     const state = STATE.clock.buttonStates.get(type);
@@ -1352,7 +1361,7 @@ function doProcessOvenInput (objectsInOven : IEntity[]) {
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
-    // TODO(JULIAN): Undo all of the entity transformations
+    // XXX(JULIAN): Handle this better
     for (let cond of STATE.oven.currRule.conditions) {
       if (cond.type === CONDITION_TYPE.PRESENT) {
         copyEntityData(/*out*/(<IConditionPresent>cond).entity, (<IConditionPresent>cond).originalEntityCopy);
@@ -1466,7 +1475,7 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
     for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
       let e1 = entities[e1Index];
       let e2 = entities[e2Index];
-      if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
+      if (excludeIds.has(e1.id) || excludeIds.has(e2.id) || (e1.deleted) || (e2.deleted) || (!e1.visible) || (!e2.visible)) {
         continue;
       }
       if (unordered2EntityHash(e1, e2) === hash &&
@@ -1577,6 +1586,12 @@ function projectVectorOntoPlane (outVec: IVector3, inVec: IVector3, unitPlaneNor
 }
 
 function displaceAlongFromToRotation (outRot : IQuaternion, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
+  const displacement = outRot;
+  displaceAlongFromToRotationDelta(/*out*/displacement, axis, startRot, inputTargetFromDir, inputTargetToDir);
+  Quat.mul(/*out*/outRot, displacement, startRot);
+}
+
+function displaceAlongFromToRotationDelta (outRotDelta : IQuaternion, axis : IVector3, startRot : IQuaternion, inputTargetFromDir : IVector3, inputTargetToDir : IVector3) {
   const targetAxis = Vec3.transformQuat(/*out*/Vec3.create(), axis, startRot);
 
   const fromVec = Vec3.create();
@@ -1587,15 +1602,20 @@ function displaceAlongFromToRotation (outRot : IQuaternion, axis : IVector3, sta
   projectVectorOntoPlane(/*out*/toVec, inputTargetToDir, targetAxis);
   Vec3.normalize(/*out*/toVec, toVec);
 
-  const displacement = Quat.rotationTo(/*out*/Quat.create(), fromVec, toVec);
-  Quat.mul(/*out*/outRot, displacement, startRot);
+  Quat.rotationTo(/*out*/outRotDelta, fromVec, toVec);
 }
 
-function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
+function displaceAlongAxisDelta (outPosDelta : IVector3, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
   const targetAxis = Vec3.transformQuat(/*out*/Vec3.create(), axis, startRot);
   const targetPosVector = Vec3.sub(/*out*/Vec3.create(), inputTargetPos, startPos);
   const displacementMagnitude = Vec3.dot(targetPosVector, targetAxis);
-  Vec3.scaleAndAdd(/*out*/outPos, startPos, targetAxis, displacementMagnitude);
+  Vec3.scale(/*out*/outPosDelta, targetAxis, displacementMagnitude);
+}
+
+function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVector3, startRot : IQuaternion, inputTargetPos : IVector3) {
+  const displacement = outPos;
+  displaceAlongAxisDelta(/*out*/displacement, axis, startPos, startRot, inputTargetPos);
+  Vec3.add(/*out*/outPos, startPos, displacement);
 }
 
 function doProcessControllerInput () : IAction[] {
