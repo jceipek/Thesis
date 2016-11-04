@@ -6,6 +6,7 @@ import * as DGRAM from 'dgram'
 import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
 import * as SH from './spatialHash'
 import { ISpatialHash } from './spatialHash'
+import { usleep } from 'sleep'
 
 type IVector3 = Vec3;
 type IQuaternion = Quat;
@@ -55,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -214,6 +215,22 @@ function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IC
   , deleted: false
   , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
   };
+}
+
+function copyEntityData (out : IEntity, entity : IEntity) {
+  out.type = entity.type;
+  // out.id = entity.id; // Intentionally omitted
+  Vec3.copy(out.pos, entity.pos);
+  Quat.copy(out.rot, entity.rot);
+  Vec3.copy(out.scale, entity.scale);
+  out.visible = entity.visible;
+  for (let i = 0; i < entity.tint.length; i++) {
+    out.tint[i] = entity.tint[i];
+  }
+  out.interactionVolume = entity.interactionVolume;
+  out.deleted = entity.deleted;
+  out.gizmoVisuals = entity.gizmoVisuals;
+  // XXX(JULIAN): children omitted! 
 }
 
 function cloneEntity (entity : IEntity) : IEntity {
@@ -419,6 +436,7 @@ interface ICondition {
 
 interface IConditionPresent extends ICondition {
   entity: IEntity;
+  originalEntityCopy: IEntity;
 }
 
 interface IConditionIntersect extends ICondition {
@@ -427,7 +445,7 @@ interface IConditionIntersect extends ICondition {
 }
 
 function makePresentCondition (entity : IEntity) : IConditionPresent {
-  return { type: CONDITION_TYPE.PRESENT, entity: entity };
+  return { type: CONDITION_TYPE.PRESENT, entity: entity, originalEntityCopy: cloneEntity(entity) };
 }
 
 function makeIntersectCondition (entityA : IEntity, entityB : IEntity) : IConditionIntersect {
@@ -1335,6 +1353,11 @@ function doProcessOvenInput (objectsInOven : IEntity[]) {
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
     // TODO(JULIAN): Undo all of the entity transformations
+    for (let cond of STATE.oven.currRule.conditions) {
+      if (cond.type === CONDITION_TYPE.PRESENT) {
+        copyEntityData(/*out*/(<IConditionPresent>cond).entity, (<IConditionPresent>cond).originalEntityCopy);
+      }
+    }
     STATE.oven.currRule.actions.length = 0;
     STATE.oven.actionIndex = -1;
   }
@@ -1742,116 +1765,122 @@ let _finishedSending : boolean = true;
 let _framesDroppedPerSecond = 0;
 let _frameCounter = 0;
 
-NETWORK.bind(undefined, undefined, () => {
-  NETWORK.setBroadcast(true);
-  _interval = setInterval(() => {
+function stepSimulation () {
+  // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
+  // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
+
+  // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
 
-    let DEBUG_start_compute = process.hrtime();
+  clearGizmosForEntityList(STATE.entities);
+  clearGizmosForEntityList(STATE.shelf.clonableModels);
+  if (STATE.oven.currRule != null) {
+    clearGizmosForEntityList(STATE.oven.currRule.entities);
+  }
 
-    // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
-    // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
-    // Vec3.lerp(STATE.entities[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
+  doProcessClockInput();
+  const objectsInOven = determineObjectsInOven();
+  doProcessOvenInput(objectsInOven);
+  const newOvenActions = doProcessControllerInput();
+  if (STATE.oven.currRule != null) {
+    STATE.oven.currRule.actions.push(...newOvenActions);
+    STATE.oven.actionIndex += newOvenActions.length;
+  }
 
+  const excludeSet = new Set<number>();
+  for (let entity of objectsInOven) {
+    excludeSet.add(entity.id);
+  }
 
-    clearGizmosForEntityList(STATE.entities);
-    clearGizmosForEntityList(STATE.shelf.clonableModels);
-    if (STATE.oven.currRule != null) {
-      clearGizmosForEntityList(STATE.oven.currRule.entities);
-    }
-  
+  if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
+    performSimulation(STATE.entities, excludeSet, STATE.oven.rules);
+    STATE.simulationTime += 1/FPS;
+  }
+  if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
+    STATE.simulating = SIMULATION_TYPE.PAUSED;
+  }
 
-    doProcessClockInput();
-    const objectsInOven = determineObjectsInOven();
-    doProcessOvenInput(objectsInOven);
-    const newOvenActions = doProcessControllerInput();
-    if (STATE.oven.currRule != null) {
-      STATE.oven.currRule.actions.push(...newOvenActions);
-      STATE.oven.actionIndex += newOvenActions.length;
-    }
+  // SH.clearCells(STATE.shelf.clonableModels.spatialHash);
+  // for (let entity of STATE.shelf.clonableModels.entities) {
+  //   SH.addToCell(entity, entity.pos, STATE.shelf.clonableModels.spatialHash);
+  // }
 
-    const excludeSet = new Set<number>();
-    for (let entity of objectsInOven) {
-      excludeSet.add(entity.id);
-    }
+  // SH.clearCells(STATE.entities.spatialHash);
+  // for (let entity of STATE.entities.entities) {
+  //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
+  // }
+}
 
-    if (STATE.simulating === SIMULATION_TYPE.FWD_ONE || STATE.simulating === SIMULATION_TYPE.FWD_CONT) {
-      performSimulation(STATE.entities, excludeSet, STATE.oven.rules);
-      STATE.simulationTime += 1/FPS;
-    }
-    if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
-      STATE.simulating = SIMULATION_TYPE.PAUSED;
-    }
-
-    // SH.clearCells(STATE.shelf.clonableModels.spatialHash);
-    // for (let entity of STATE.shelf.clonableModels.entities) {
-    //   SH.addToCell(entity, entity.pos, STATE.shelf.clonableModels.spatialHash);
-    // }
-
-    // SH.clearCells(STATE.entities.spatialHash);
-    // for (let entity of STATE.entities.entities) {
-    //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
-    // }
-
-    let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
-    if (!_finishedSending) {
-      _framesDroppedPerSecond++;      
-    } else {
-      let DEBUG_start_sending = process.hrtime();
-      // TRANSFER STATE
-      _finishedSending = false;
-      sendSimulationTimePromise(STATE.simulationTime).then(() => {
-        Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
-          Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
-            // XXX(JULIAN): Optimize this so we don't send everything all the time!
-            Promise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
-            let avatarStuffToSend = [];
-            let controllerAttachmentDataToSend = [];
-            for (let remoteClient of STATE.inputData.keys()) {
-              for (let [client, inputData] of STATE.inputData) {
-                if (remoteClient !== client) {
-                  avatarStuffToSend.push({destination: remoteClient, data: inputData})
-                } else {
-                  controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
-                }
-                avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
-              }
+function sendState () {
+  sendSimulationTimePromise(STATE.simulationTime).then(() => {
+    Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
+      Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
+        // XXX(JULIAN): Optimize this so we don't send everything all the time!
+        Promise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
+        let avatarStuffToSend = [];
+        let controllerAttachmentDataToSend = [];
+        for (let remoteClient of STATE.inputData.keys()) {
+          for (let [client, inputData] of STATE.inputData) {
+            if (remoteClient !== client) {
+              avatarStuffToSend.push({destination: remoteClient, data: inputData})
+            } else {
+              controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
             }
+            avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
+          }
+        }
 
-            Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
-              Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
-                // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+        Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
+          Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
+            // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
-                Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
-                  let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-                  // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
-                  // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
-                });
-
-                _finishedSending = true;
-              });
+            Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
+              // let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+              // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
+              // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
+              _finishedSending = true;
             });
 
-
-            // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
-            });
           });
         });
+
+        // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
+        });
       });
-    }
+    });
+  });
+}
 
-    _frameCounter++;
-    if (_frameCounter >= FPS) {
-      if (_framesDroppedPerSecond > 0) {
-        console.log(`${_framesDroppedPerSecond} frames dropped per second!`);
-        _framesDroppedPerSecond = 0;
-      }
-      _frameCounter = 0;
-    }
+function stepSimulationAndSend () {
+  let DEBUG_start_compute = process.hrtime();
+  stepSimulation();
 
-    STATE.globalTime += 1/FPS;
-  }, 1000/FPS);
+  let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
+  if (!_finishedSending) {
+    _framesDroppedPerSecond++;      
+  } else {
+    let DEBUG_start_sending = process.hrtime();
+    sendState();
+    _finishedSending = false;
+  }
+
+  _frameCounter++;
+  if (_frameCounter >= FPS) {
+    if (_framesDroppedPerSecond > 0) {
+      console.log(`${_framesDroppedPerSecond} frames dropped per second!`);
+      _framesDroppedPerSecond = 0;
+    }
+    _frameCounter = 0;
+  }
+
+  STATE.globalTime += 1/FPS;
+}
+
+
+NETWORK.bind(undefined, undefined, () => {
+  NETWORK.setBroadcast(true);
+  _interval = setInterval(stepSimulationAndSend, 1000/FPS);
 });
 
 NETWORK.on('listening', () => {
