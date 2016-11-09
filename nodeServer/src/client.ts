@@ -56,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -82,6 +82,9 @@ let _latestEntityId = 0;
 
 const CLOCK_BUTTON_BASE_ROT = Quat.fromValues(-0.7071068, 0, 0, 0.7071068);
 const CLOCK_BUTTON_FLIPPED_ROT = Quat.fromValues(0.7071068, 0, 0, 0.7071068);
+
+const OVEN_BUTTON_BASE_ROT = Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907);
+const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.5170867, -4.186709e-17);
 
 const STATE : IState = getInitialState();
 
@@ -859,13 +862,13 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
   ovenProjectionModel.visible = false;
   buttonModels.set(MODEL_TYPE.OVEN_PROJECTION_SPACE, ovenProjectionModel);
   ovenModel.children.entities.push(ovenProjectionModel);
-  const ovenCancelButtonModel = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_CANCEL_BUTTON);
+  const ovenCancelButtonModel = makeModel(Vec3.fromValues(0.2389622,0.7320477,0.4061717), Quat.clone(OVEN_BUTTON_BASE_ROT), MODEL_TYPE.OVEN_CANCEL_BUTTON);
   buttonModels.set(MODEL_TYPE.OVEN_CANCEL_BUTTON, ovenCancelButtonModel);
   ovenModel.children.entities.push(ovenCancelButtonModel);
-  // const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
+  // const ovenStepBackButtonModel = makeModel(Vec3.fromValues(-0.08082727,0.7320479,0.4061716), Quat.clone(OVEN_BUTTON_BASE_ROT), MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON);
   // buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, ovenStepBackButtonModel);
   // ovenModel.children.entities.push(ovenStepBackButtonModel);
-  // const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
+  // const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.clone(OVEN_BUTTON_BASE_ROT), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
   // buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
   // ovenModel.children.entities.push(ovenStepForwardButtonModel);
 
@@ -1358,6 +1361,10 @@ function doProcessOvenInput (objectsInOven : IEntity[]) {
     const state = STATE.oven.buttonStates.get(type);
     state.curr = doIntersect[type]? 1 : 0;
   }
+
+  
+  const cancelButtonActive = (STATE.oven.currRule !== null && STATE.oven.currRule.actions.length > 0);
+  Quat.copy(STATE.oven.buttonModels.get(MODEL_TYPE.OVEN_CANCEL_BUTTON).rot, cancelButtonActive? OVEN_BUTTON_BASE_ROT : OVEN_BUTTON_FLIPPED_ROT);
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
