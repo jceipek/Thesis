@@ -647,8 +647,9 @@ function setControllerInteractionPoint (outPt : IVector3, inPos : IVector3, inRo
 }
 
 function gizmoFlagsForEntityGivenController (entity: IEntity, sourceList : IEntityList, controller : IController) : GIZMO_VISUALS_FLAGS {
-  const gizmoRadius = 0.08011519831;
-  const gizmoAxisTargetRadius = 0.015;
+  const gizmoRadius = 0.08011519831; // .5  0.1602303966
+  // const gizmoAxisTargetRadius = 0.015;
+  const gizmoAxisTargetRadius = 0.03;
   const gizmoAxisTarget : ISphereInteractionVolume = { type: VOLUME_TYPE.SPHERE, radius: gizmoAxisTargetRadius };
 
   let entityAbsPos = Vec3.create();
@@ -677,7 +678,8 @@ function gizmoFlagsForEntityGivenController (entity: IEntity, sourceList : IEnti
   }
 
   const gizmoRadiusSquared = gizmoRadius * gizmoRadius;
-  const gizmoRingTargetThicknessRadius = 0.008;
+  // const gizmoRingTargetThicknessRadius = 0.008;
+  const gizmoRingTargetThicknessRadius = 0.02610986;
   const gizmoOuterRadius = gizmoRadius+gizmoRingTargetThicknessRadius;
   const gizmoInnerRadius = gizmoRadius-gizmoRingTargetThicknessRadius;
   if ((controllerPos[1]*controllerPos[1] + controllerPos[2]*controllerPos[2] <= gizmoOuterRadius*gizmoOuterRadius) &&
