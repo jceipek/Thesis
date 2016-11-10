@@ -56,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -678,7 +678,6 @@ function gizmoFlagsForEntityGivenController (entity: IEntity, sourceList : IEnti
   }
 
   const gizmoRadiusSquared = gizmoRadius * gizmoRadius;
-  // const gizmoRingTargetThicknessRadius = 0.008;
   const gizmoRingTargetThicknessRadius = 0.02610986;
   const gizmoOuterRadius = gizmoRadius+gizmoRingTargetThicknessRadius;
   const gizmoInnerRadius = gizmoRadius-gizmoRingTargetThicknessRadius;
@@ -1476,6 +1475,11 @@ function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds
 function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
+
+  if (intersectCond === undefined || presentConds.length !== 2) {
+    // TODO(JULIAN): XXX(JULIAN): Handle 3 objects present instead of just 2 intersecting
+    return;
+  }
 
   const hash = unordered2EntityHash(intersectCond.entityA, intersectCond.entityB);
 
