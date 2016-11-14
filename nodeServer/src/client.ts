@@ -56,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -1845,7 +1845,7 @@ function stepSimulation () {
   // }
 }
 
-function sendState () {
+function sendState (DEBUG_start_sending) {
   sendSimulationTimePromise(STATE.simulationTime).then(() => {
     Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
       Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
@@ -1869,7 +1869,8 @@ function sendState () {
             // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
             Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
-              // let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+              let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
+              // console.log('Transfer'+sending_elapsed);
               // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
               // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
               _finishedSending = true;
@@ -1890,11 +1891,12 @@ function stepSimulationAndSend () {
   stepSimulation();
 
   let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
+  // console.log('PROC:'+compute_elapsed);
   if (!_finishedSending) {
     _framesDroppedPerSecond++;      
   } else {
     let DEBUG_start_sending = process.hrtime();
-    sendState();
+    sendState(DEBUG_start_sending);
     _finishedSending = false;
   }
 
