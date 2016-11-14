@@ -107,6 +107,9 @@ public class NetManager : MonoBehaviour {
             int dataLength = 0;
             try {
                 dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
+                if (_servEP.ToString() != "127.0.0.1:5023") {
+                    dataLength = 0;
+                }
             } catch (System.Net.Sockets.SocketException e) {
                 if (e.SocketErrorCode != System.Net.Sockets.SocketError.ConnectionReset) {
                     Debug.Log(e.SocketErrorCode);
