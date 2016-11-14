@@ -9,15 +9,17 @@ using System.IO;
 public class NetManager : MonoBehaviour {
 
     public static NetManager G = null; 
-    [SerializeField] string _serverIPAddress = "127.0.0.1";
+    [SerializeField] string _serverIPAddress = "192.168.0.4";
+    [SerializeField] string _serverIPAddress2 = "192.168.0.4";
     [SerializeField] int _ioPort = 8053;
+    [SerializeField] int _ioPort2 = 8053;
     [SerializeField] MessageHandler _messageHandler;
 
     Socket _clientSock = new Socket(AddressFamily.InterNetwork, // IPv4
                                     SocketType.Dgram, 
                                     ProtocolType.Udp);
-    IPEndPoint _servIPEP;
-    EndPoint _servEP;
+    IPEndPoint _servIPEP, _servIPEP2;
+    EndPoint _servEP, _servEP2;
 
     IPEndPoint _clientIPEP;
     EndPoint _clientEP;
@@ -58,7 +60,9 @@ public class NetManager : MonoBehaviour {
             _sendBufferWriter = new BinaryWriter(_sendBufferStream);
 
             _servIPEP = new IPEndPoint(IPAddress.Parse(_serverIPAddress), port: _ioPort);
+            _servIPEP2 = new IPEndPoint(IPAddress.Parse(_serverIPAddress2), port: _ioPort2);
             _servEP = (EndPoint)_servIPEP;
+            _servEP2 = (EndPoint)_servIPEP2;
 
             _clientIPEP = new IPEndPoint(IPAddress.Any, _ioPort);
             _clientEP = (EndPoint)_clientIPEP;
@@ -133,6 +137,7 @@ public class NetManager : MonoBehaviour {
         _sendBufferWriter.Write(message);
         // XXX(Julian): Serializing _servEP is an allocation!!!
         _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
+        _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP2);
     }
 
     public void SendInputData (Vector3 headsetPos, Quaternion headsetRot,
@@ -169,6 +174,7 @@ public class NetManager : MonoBehaviour {
 
         try {
             _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP);
+            _clientSock.SendTo(_sendBuffer, (int)_sendBufferStream.Position, SocketFlags.None, _servEP2);
         } catch (System.Exception e) {
             Debug.Log(e);
         }
