@@ -53,6 +53,7 @@ const enum SIMULATION_TYPE {
 , FWD_CONT = 2
 }
 
+const SERVER_PORT = 5023;
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
@@ -1907,7 +1908,7 @@ function stepSimulationAndSend () {
 }
 
 
-NETWORK.bind(undefined, undefined, () => {
+NETWORK.bind(SERVER_PORT, undefined, () => {
   NETWORK.setBroadcast(true);
   _interval = setInterval(stepSimulationAndSend, 1000/FPS);
 });
