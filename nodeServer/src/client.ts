@@ -357,6 +357,8 @@ interface IController {
   grab: IButtonState;
   action0: IButtonState;
 
+  ignore: boolean;
+
   attachment: CONTROLLER_ATTACHMENT_TYPE;
 }
 
@@ -373,6 +375,7 @@ function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : ICon
          , action0: { curr: 0, last: 0 }
          , id: _latestEntityId++
          , attachmentId: _latestEntityId++
+         , ignore: false
          , attachment: startingAttachment };
 }
 
@@ -1206,6 +1209,7 @@ function doProcessClockInput (controllers : IController[]) {
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
 
   for (let controller of controllers) {
+    if (controller.ignore) { continue; }
     for (let type of buttonTypes) {
       getPosRotForSubObj(_tempVec, _tempQuat, STATE.clock.model, STATE.clock.buttonModels.get(type));
       if (doVolumesOverlap(controller.pos, controller.interactionVolume
@@ -1282,6 +1286,7 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
 
   for (let controller of controllers) {
+    if (controller.ignore) { continue; }
     for (let type of buttonTypes) {
       getPosRotForSubObj(_tempVec, _tempQuat, STATE.oven.model, STATE.oven.buttonModels.get(type));
       if (doVolumesOverlap(controller.pos, controller.interactionVolume
@@ -1604,7 +1609,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
   const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
 
   for (let controller of controllers) {
-
+    if (controller.ignore) { continue; }
     let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
     const overlapsClosest = closestEntity !== null &&
                             doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot);
@@ -1847,6 +1852,7 @@ function stepSimulationAndSend () {
   }
   stepSimulation(controllers); // S_t -> S_t+1
   for (let controller of controllers) {
+    if (controller.ignore) { continue; }
     controller.grab.last = controller.grab.curr; // So that we can grab things
     controller.action0.last = controller.action0.curr;
   }
