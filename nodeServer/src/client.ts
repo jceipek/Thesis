@@ -56,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -356,13 +356,6 @@ interface IController {
   rot: IQuaternion;
   grab: IButtonState;
   action0: IButtonState;
-  pickedUpObject: IEntity|null;
-  pickedUpObjectTime: Date;
-  pickedUpObjectOffset: IVector3;
-  pickedUpObjectRotOffset: IQuaternion;
-
-  pickedUpObjectPos: IVector3;
-  pickedUpObjectRot: IQuaternion;
 
   attachment: CONTROLLER_ATTACHMENT_TYPE;
 }
@@ -378,12 +371,6 @@ function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : ICon
          , rot: Quat.create()
          , grab: { curr: 0, last: 0 }
          , action0: { curr: 0, last: 0 }
-         , pickedUpObject: null
-         , pickedUpObjectTime: null
-         , pickedUpObjectOffset: Vec3.create()
-         , pickedUpObjectRotOffset: Quat.create()
-         , pickedUpObjectPos: Vec3.create()
-         , pickedUpObjectRot: Quat.create()
          , id: _latestEntityId++
          , attachmentId: _latestEntityId++
          , attachment: startingAttachment };
@@ -1205,24 +1192,6 @@ function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVecto
 //   return closest;
 // }
 
-function pickUpEntityWithController (entity: IEntity, controller: IController) {
-  controller.pickedUpObject = entity;
-  controller.pickedUpObjectTime = new Date();
-
-  Vec3.copy(/*out*/controller.pickedUpObjectPos, entity.pos);
-  Quat.copy(/*out*/controller.pickedUpObjectRot, entity.rot);
-
-  Vec3.transformQuat(/*out*/controller.pickedUpObjectOffset
-                    , Vec3.sub(/*out*/controller.pickedUpObjectOffset
-                              , entity.pos, controller.pos)
-                    , Quat.invert(/*out*/controller.pickedUpObjectRotOffset
-                                    , controller.rot));
-
-  Quat.mul(/*out*/controller.pickedUpObjectRotOffset
-          , Quat.invert(/*out*/controller.pickedUpObjectRotOffset
-                                      , controller.rot), entity.rot);
-}
-
 function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : IEntity, child : IEntity) {
   Quat.mul(/*out*/outRot
           , parent.rot, child.rot);
@@ -1231,22 +1200,19 @@ function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : I
                                          , child.pos, parent.rot));
 }
 
-function doProcessClockInput () {
+function doProcessClockInput (controllers : IController[]) {
   const buttonTypes = [ MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, /*MODEL_TYPE.CLOCK_RESET_STATE_BUTTON,*/ MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON /*, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON*/ ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
-  for (let [client, inputData] of STATE.inputData) {
-      let controllers = inputData.controllers;
-      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
-        let controller = controllers[controllerIndex];
-        for (let type of buttonTypes) {
-          getPosRotForSubObj(_tempVec, _tempQuat, STATE.clock.model, STATE.clock.buttonModels.get(type));
-          if (doVolumesOverlap(controller.pos, controller.interactionVolume
-                              , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
-            doIntersect[type] = true;
-          }
-        }
+
+  for (let controller of controllers) {
+    for (let type of buttonTypes) {
+      getPosRotForSubObj(_tempVec, _tempQuat, STATE.clock.model, STATE.clock.buttonModels.get(type));
+      if (doVolumesOverlap(controller.pos, controller.interactionVolume
+                          , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
+        doIntersect[type] = true;
       }
+    }
   }
 
   for (let type of buttonTypes) {
@@ -1310,22 +1276,19 @@ function determineObjectsInOven () {
   return objectsInOven;
 }
 
-function doProcessOvenInput (objectsInOven : IEntity[]) {
+function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity[]) {
   const buttonTypes = [ MODEL_TYPE.OVEN_CANCEL_BUTTON /*, MODEL_TYPE.OVEN_SINGLE_STEP_BACK_BUTTON, MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON*/ ];
   let doIntersect = {};
   buttonTypes.forEach((type) => { doIntersect[type] = false; });
-  for (let [client, inputData] of STATE.inputData) {
-      let controllers = inputData.controllers;
-      for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
-        let controller = controllers[controllerIndex];
-        for (let type of buttonTypes) {
-          getPosRotForSubObj(_tempVec, _tempQuat, STATE.oven.model, STATE.oven.buttonModels.get(type));
-          if (doVolumesOverlap(controller.pos, controller.interactionVolume
-                              , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
-            doIntersect[type] = true;
-          }
-        }
+
+  for (let controller of controllers) {
+    for (let type of buttonTypes) {
+      getPosRotForSubObj(_tempVec, _tempQuat, STATE.oven.model, STATE.oven.buttonModels.get(type));
+      if (doVolumesOverlap(controller.pos, controller.interactionVolume
+                          , _tempVec, <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 })) {
+        doIntersect[type] = true;
       }
+    }
   }
 
   STATE.oven.buttonModels.get(MODEL_TYPE.OVEN_PROJECTION_SPACE).visible = (objectsInOven.length > 0);
@@ -1631,7 +1594,7 @@ function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVect
   Vec3.add(/*out*/outPos, startPos, displacement);
 }
 
-function doProcessControllerInput () : IAction[] {
+function doProcessControllerInput (controllers: IController[]) : IAction[] {
   const newOvenActions : IAction[] = [];
   const newInProgressAlterations : IAlteration[] = [];
 
@@ -1640,143 +1603,131 @@ function doProcessControllerInput () : IAction[] {
   let shelfEntities = STATE.shelf.clonableModels;
   const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
 
-  for (let [client, inputData] of STATE.inputData) {
-    let controllers = inputData.controllers;
-    for (let controller of controllers) {
+  for (let controller of controllers) {
 
-      let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
-      const overlapsClosest = closestEntity !== null &&
-                              doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot);
-      let gizmoFlags = GIZMO_VISUALS_FLAGS.None;
-      if (overlapsClosest && controller.attachment === CONTROLLER_ATTACHMENT_TYPE.GRAB) {
-        gizmoFlags = gizmoFlagsForEntityGivenController(closestEntity, sourceList, controller);
-        closestEntity.gizmoVisuals = gizmoFlags; 
-      }
+    let [closestEntity, sourceList] = getClosestEntityOfListsToPoint(entityLists, controller.pos);
+    const overlapsClosest = closestEntity !== null &&
+                            doesControllerOverlapObject(controller, closestEntity, sourceList.offsetPos, sourceList.offsetRot);
+    let gizmoFlags = GIZMO_VISUALS_FLAGS.None;
+    if (overlapsClosest && controller.attachment === CONTROLLER_ATTACHMENT_TYPE.GRAB) {
+      gizmoFlags = gizmoFlagsForEntityGivenController(closestEntity, sourceList, controller);
+      closestEntity.gizmoVisuals = gizmoFlags; 
+    }
 
-      const usedAlteration = alterationThatUsesController(controller, STATE.inProgressAlterations);
-      if (usedAlteration === null) {
-        // Process if controller not used!
-        if (didControllerJustGrab(controller)) {
-          if (overlapsClosest) {
-            // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
-            const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
-            for (let alt of alterationsUsingClosestEntity) {
-              alt.valid = false;
-            }
+    const usedAlteration = alterationThatUsesController(controller, STATE.inProgressAlterations);
+    if (usedAlteration === null) {
+      // Process if controller not used!
+      if (didControllerJustGrab(controller)) {
+        if (overlapsClosest) {
+          // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
+          const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
+          for (let alt of alterationsUsingClosestEntity) {
+            alt.valid = false;
+          }
 
-            switch (controller.attachment) {
-              case CONTROLLER_ATTACHMENT_TYPE.GRAB:
-                if (sourceList === ovenEntities) {
-                  console.log("MAKING OVEN ALTERATION");
-                }
-                if (sourceList === shelfEntities) {
-                  closestEntity = cloneEntity(closestEntity);
-                  applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
-                  sourceList = worldEntities;
-                  worldEntities.entities.push(closestEntity);
-                }
-                newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList));
-                break;
-              case CONTROLLER_ATTACHMENT_TYPE.DELETE:
-                if (sourceList !== shelfEntities) {
-                  newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
-                }
-                break;
-            }
+          switch (controller.attachment) {
+            case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+              if (sourceList === ovenEntities) {
+                console.log("MAKING OVEN ALTERATION");
+              }
+              if (sourceList === shelfEntities) {
+                closestEntity = cloneEntity(closestEntity);
+                applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
+                sourceList = worldEntities;
+                worldEntities.entities.push(closestEntity);
+              }
+              newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList));
+              break;
+            case CONTROLLER_ATTACHMENT_TYPE.DELETE:
+              if (sourceList !== shelfEntities) {
+                newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
+              }
+              break;
           }
         }
-      } else if (usedAlteration.valid) {
-        // Process if controller already used!
-        switch (usedAlteration.type) {
-          case ALTERATION_TYPE.MOVE:
-            const entityToMove = (<IAlterationMove>usedAlteration).entity;
-            const controllerMetadata = (<IAlterationMove>usedAlteration).controllerMetadata;
+      }
+    } else if (usedAlteration.valid) {
+      // Process if controller already used!
+      switch (usedAlteration.type) {
+        case ALTERATION_TYPE.MOVE:
+          const entityToMove = (<IAlterationMove>usedAlteration).entity;
+          const controllerMetadata = (<IAlterationMove>usedAlteration).controllerMetadata;
 
-            const controllerPos = _tempVec;
-            const controllerRot = _tempQuat;
-            applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
-                                      , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
+          const controllerPos = _tempVec;
+          const controllerRot = _tempQuat;
+          applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
+                                    , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
 
-            
-            const entityTargetPos = Vec3.create();
-            Vec3.add(/*out*/entityTargetPos
-                    , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
-                                                       , controllerMetadata.offsetPos, controllerRot));
+          
+          const entityTargetPos = Vec3.create();
+          Vec3.add(/*out*/entityTargetPos
+                  , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
+                                                      , controllerMetadata.offsetPos, controllerRot));
 
-            // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
-            // offsetRot = Quat.invert(controllerRot) * entity.rot
+          // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
+          // offsetRot = Quat.invert(controllerRot) * entity.rot
 
-            const oldControllerRot = Quat.create();
-            const oldControllerPos = Vec3.create();
-            Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
-            Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+          const oldControllerRot = Quat.create();
+          const oldControllerPos = Vec3.create();
+          Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
+          Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
 
-            const oldDir = Vec3.create(); 
-            Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
-            Vec3.normalize(/*out*/oldDir, oldDir);
-            const newDir = Vec3.create(); 
-            Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
-            Vec3.normalize(/*out*/newDir, newDir);
+          const oldDir = Vec3.create(); 
+          Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+          Vec3.normalize(/*out*/oldDir, oldDir);
+          const newDir = Vec3.create(); 
+          Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+          Vec3.normalize(/*out*/newDir, newDir);
 
-            const constraint = (<IAlterationMove>usedAlteration).constraint;
-            switch (constraint) {
-              case GIZMO_VISUALS_FLAGS.XAxis:
-                displaceAlongAxis(/*modified*/entityToMove.pos, X_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
-                break;
-              case GIZMO_VISUALS_FLAGS.YAxis:
-                displaceAlongAxis(/*modified*/entityToMove.pos, Y_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
-                break;
-              case GIZMO_VISUALS_FLAGS.ZAxis:
-                displaceAlongAxis(/*modified*/entityToMove.pos, Z_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
-                break;
-              case GIZMO_VISUALS_FLAGS.XRing:
-                displaceAlongFromToRotation(entityToMove.rot, X_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
-                break;
-              case GIZMO_VISUALS_FLAGS.YRing:
-                displaceAlongFromToRotation(entityToMove.rot, Y_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
-                break;
-              case GIZMO_VISUALS_FLAGS.ZRing:
-                displaceAlongFromToRotation(entityToMove.rot, Z_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
-                break;
-              default:
-                const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
-                Vec3.copy(/*out*/entityToMove.pos, entityTargetPos);
-                Quat.copy(/*out*/entityToMove.rot, entityTargetRot);
+          const constraint = (<IAlterationMove>usedAlteration).constraint;
+          switch (constraint) {
+            case GIZMO_VISUALS_FLAGS.XAxis:
+              displaceAlongAxis(/*modified*/entityToMove.pos, X_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
               break;
-            }
+            case GIZMO_VISUALS_FLAGS.YAxis:
+              displaceAlongAxis(/*modified*/entityToMove.pos, Y_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+              break;
+            case GIZMO_VISUALS_FLAGS.ZAxis:
+              displaceAlongAxis(/*modified*/entityToMove.pos, Z_VECTOR3, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, entityTargetPos);
+              break;
+            case GIZMO_VISUALS_FLAGS.XRing:
+              displaceAlongFromToRotation(entityToMove.rot, X_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+              break;
+            case GIZMO_VISUALS_FLAGS.YRing:
+              displaceAlongFromToRotation(entityToMove.rot, Y_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+              break;
+            case GIZMO_VISUALS_FLAGS.ZRing:
+              displaceAlongFromToRotation(entityToMove.rot, Z_VECTOR3, controllerMetadata.entityStartRot, oldDir, newDir);
+              break;
+            default:
+              const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
+              Vec3.copy(/*out*/entityToMove.pos, entityTargetPos);
+              Quat.copy(/*out*/entityToMove.rot, entityTargetRot);
+            break;
+          }
 
 
-            entityToMove.gizmoVisuals = constraint;
+          entityToMove.gizmoVisuals = constraint;
 
-            
-            if (didControllerJustRelease(controller)) {
-              // DELETE this alteration; make a new action for it...
-              if (usedAlteration.entitiesList === ovenEntities) {
-                newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration));
-              }
-            } else {
-              newInProgressAlterations.push(usedAlteration);
-            }
-          break;
-          case ALTERATION_TYPE.DELETE:
-            const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
-            entityToDelete.deleted = true;
+          
+          if (didControllerJustRelease(controller)) {
             // DELETE this alteration; make a new action for it...
             if (usedAlteration.entitiesList === ovenEntities) {
-              newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
+              newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration));
             }
-          break;
-        } 
-      }
-    }
-  }
-
-  for (let [client, inputData] of STATE.inputData) {
-    let controllers = inputData.controllers;
-    for (let controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) {
-      let controller = controllers[controllerIndex];
-      controller.grab.last = controller.grab.curr; // So that we can grab things
-      controller.action0.last = controller.action0.curr;
+          } else {
+            newInProgressAlterations.push(usedAlteration);
+          }
+        break;
+        case ALTERATION_TYPE.DELETE:
+          const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
+          entityToDelete.deleted = true;
+          // DELETE this alteration; make a new action for it...
+          if (usedAlteration.entitiesList === ovenEntities) {
+            newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
+          }
+        break;
+      } 
     }
   }
 
@@ -1798,7 +1749,7 @@ let _finishedSending : boolean = true;
 let _framesDroppedPerSecond = 0;
 let _frameCounter = 0;
 
-function stepSimulation () {
+function stepSimulation (controllers : IController[]) {
   // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
   // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
@@ -1812,10 +1763,10 @@ function stepSimulation () {
   }
 
 
-  doProcessClockInput();
+  doProcessClockInput(controllers);
   const objectsInOven = determineObjectsInOven();
-  doProcessOvenInput(objectsInOven);
-  const newOvenActions = doProcessControllerInput();
+  doProcessOvenInput(controllers, objectsInOven);
+  const newOvenActions = doProcessControllerInput(controllers); // NOTE(JULIAN): Mutates controllers
   if (STATE.oven.currRule != null) {
     STATE.oven.currRule.actions.push(...newOvenActions);
     STATE.oven.actionIndex += newOvenActions.length;
@@ -1887,7 +1838,18 @@ function sendState () {
 
 function stepSimulationAndSend () {
   let DEBUG_start_compute = process.hrtime();
-  stepSimulation();
+
+  let controllers = [];
+  for (let [client, inputData] of STATE.inputData) {
+    for (let controller of inputData.controllers) {
+      controllers.push(controller);
+    }
+  }
+  stepSimulation(controllers); // S_t -> S_t+1
+  for (let controller of controllers) {
+    controller.grab.last = controller.grab.curr; // So that we can grab things
+    controller.action0.last = controller.action0.curr;
+  }
 
   let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
   if (!_finishedSending) {
