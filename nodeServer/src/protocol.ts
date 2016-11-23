@@ -58,6 +58,11 @@ export const enum MODEL_TYPE {
   CONTROLLER_ATTACHMENT_PLIERS = 0X16
 }
 
+export const ATTACHMENT_TYPE_TO_MODEL = {};
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;
+ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;
+
 export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
   offset = buf.writeInt8(messageType, offset, true);
   offset = buf.writeInt32LE(sequenceNumber, offset, true);

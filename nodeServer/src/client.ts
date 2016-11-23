@@ -1,72 +1,60 @@
 import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS } from './protocol'
-import * as Protocol from './protocol'
-import * as FS from 'fs'
 import * as BPromise from 'bluebird'
-import * as DGRAM from 'dgram'
+import * as FS from 'fs'
 import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
 import * as SH from './spatialHash'
 import { ISpatialHash } from './spatialHash'
 import { usleep } from 'sleep'
+import {
+  IState
+, ITransientState
+, IEntityList
+, IEntity
+, ISegment
+, IInteractionVolume
+, ISphereInteractionVolume
+, IButtonState
+, IHeadset
+, IController
+, IInputData
+, IRule
+, ICondition
+, IConditionPresent
+, IConditionIntersect
+, IAlteration
+, IControllerMetadata
+, IAlterationMove
+, IAlterationDelete
+, IAction
+, IActionWithEntity
+, IActionMoveBy
+, IActionDelete
+, IOven
+, IShelf
+, IClock
+, VOLUME_TYPE
+, SIMULATION_TYPE
+, CONDITION_TYPE
+, ALTERATION_TYPE
+, ACTION_TYPE
+} from './interface'
+import {
+  NETWORK
+, FPS
+, X_VECTOR3
+, Y_VECTOR3
+, Z_VECTOR3
+, UNIT_VECTOR3
+, NULL_VECTOR3
+, IDENT_QUAT
+, BASE_COLOR
+} from './constants'
+import * as Transfer from './stateTransfer'
 
 type IVector3 = Vec3;
 type IQuaternion = Quat;
 type IColor = Uint8Array;
 
-interface IEntity {
-  type: MODEL_TYPE;
-  id: number;
-  pos: IVector3;
-  rot: IQuaternion;
-  scale: IVector3;
-  visible: boolean;
-  tint: IColor;
-  gizmoVisuals: GIZMO_VISUALS_FLAGS;
-
-  interactionVolume: IInteractionVolume;
-  children: IEntityList;
-  deleted: boolean;
-}
-
-interface ISegment {
-  id: number;
-  start: IVector3;
-  end: IVector3;
-  color: IColor;
-}
-
-interface IInteractionVolume {
-  type: VOLUME_TYPE;
-}
-
-interface ISphereInteractionVolume extends IInteractionVolume {
-  radius: number;
-}
-
-const enum VOLUME_TYPE {
-  SPHERE
-, NONE
-}
-
-const enum SIMULATION_TYPE {
-  PAUSED = 0
-, FWD_ONE = 1
-, FWD_CONT = 2
-}
-
-const PORT = 8053;
-// const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
-// const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
-
-const NETWORK = DGRAM.createSocket('udp4');
-
-const X_VECTOR3 = Vec3.fromValues(1,0,0);
-const Y_VECTOR3 = Vec3.fromValues(0,1,0);
-const Z_VECTOR3 = Vec3.fromValues(0,0,1);
-const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
-const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
-const IDENT_QUAT = Quat.create();
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
 
@@ -75,10 +63,6 @@ const CELL_COUNT = 1024;
 
 
 let _interval : null|NodeJS.Timer = null;
-// const _sendBuffer = Buffer.allocUnsafe(1024);
-const _sendBuffer = Buffer.allocUnsafe(131072);
-const FPS = 90;
-// const FPS = 30;
 let _latestEntityId = 0;
 
 const CLOCK_BUTTON_BASE_ROT = Quat.fromValues(-0.7071068, 0, 0, 0.7071068);
@@ -88,122 +72,8 @@ const OVEN_BUTTON_BASE_ROT = Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709
 const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.5170867, -4.186709e-17);
 
 const STATE : IState = getInitialState();
+const TRANSIENT_STATE : ITransientState = { inputData: new Map<string,IInputData>() };
 
-function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
-  NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
-}
-
-function sendTarget (message : Buffer, messageLength: number, host: string, port: number, callback : (err: any, bytes: number) => void) {
-  NETWORK.send(message, 0, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
-}
-
-let _currSeqId = 0;
-
-const BASE_COLOR = new Uint8Array([0xFF,0xFF,0xFF,0xFF]);
-
-
-const ATTACHMENT_TYPE_TO_MODEL = {};
-ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;
-ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;
-ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;
-
-function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  let [host, portString] = destination.split(':');
-  let port = parseInt(portString, 10);
-  let controller0 = inputData.controllers[0];
-  let controller1 = inputData.controllers[1];
-  sendTarget(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-    _currSeqId++;
-    sendTarget(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-      _currSeqId++;
-      sendTarget(_sendBuffer, messageLength, host, port, () => {
-        const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3,
-         true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-         _currSeqId++;
-        sendTarget(_sendBuffer, messageLength, host, port, () => {
-          const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3,
-          true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-          _currSeqId++;
-          sendTarget(_sendBuffer, messageLength, host, port, callback);
-        });
-      });
-    });
-  });
-}
-
-function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity, callback : () => (err: any, bytes: number) => void) {  
-  const rot = Quat.mul(/*out*/Quat.create()
-                      , offsetrot, entity.rot);
-  const pos = Vec3.add(/*out*/Vec3.create()
-                      , offsetpos, Vec3.transformQuat(/*out*/_tempVec
-                                                     , entity.pos, offsetrot));
-  const scale = Vec3.mul(/*out*/Vec3.create()
-                        , entity.scale, offsetscale);
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                       , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                       , _currSeqId
-                                                                                       , entity.id
-                                                                                       , entity.type
-                                                                                       , pos
-                                                                                       , rot
-                                                                                       , scale
-                                                                                       , entity.visible && !entity.deleted 
-                                                                                       , entity.tint
-                                                                                       , entity.gizmoVisuals);
-  _currSeqId++;
-  sendBroadcast(_sendBuffer, messageLength, () => {
-    BPromise.each(entity.children.entities, (child) => { return sendEntityDataPromise(pos, rot, scale, child); }).then(() => {
-      callback();
-    })
-  });
-}
-
-function sendEntity (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
-  sendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity, callback);
-}
-
-function sendEntityList (entityList : IEntityList, callback : () => (err: any, bytes: number) => void) {
-  // TODO(JULIAN): Implement scale for entity lists and use it here
-  BPromise.each(entityList.entities, (entity) => { return sendEntityDataPromise(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity); }).then(() => {
-    callback();
-  });
-}
-
-function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
-  _currSeqId++;
-  sendBroadcast(_sendBuffer, messageLength, callback);
-}
-
-function sendSimulationTime (time : number, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, 0, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
-  _currSeqId++;
-  sendBroadcast(_sendBuffer, messageLength, callback);
-}
-
-const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
-function sendAttachment (destination: string, controllers : IController[], callback : () => (err: any, bytes: number) => void) {
-  const [host, portString] = destination.split(':');
-  const port = parseInt(portString, 10);
-  _controllerAttachmentsBuffer[0] = controllers[0].attachment;
-  _controllerAttachmentsBuffer[1] = controllers[1].attachment;
-  const messageLength = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, 0, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
-  _currSeqId++;
-  sendTarget(_sendBuffer, messageLength, host, port, callback);
-}
-
-
-const sendEntityPromise = BPromise.promisify(sendEntity);
-const sendEntityDataPromise = BPromise.promisify(sendEntityData);
-const sendEntityListPromise = BPromise.promisify(sendEntityList);
-const sendSegmentPromise = BPromise.promisify(sendSegment);
-const sendAvatarInfoPromise = BPromise.promisify(sendAvatarInfo);
-const sendSimulationTimePromise = BPromise.promisify(sendSimulationTime);
-const sendAttachmentPromise = BPromise.promisify(sendAttachment);
 
 function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
@@ -338,36 +208,6 @@ function makeSegment (start : IVector3, end : IVector3, color: IColor) : ISegmen
   };
 }
 
-interface IButtonState {
-  curr: 0|1;
-  last: 0|1;
-}
-
-interface IHeadset {
-  id : number;
-  pos : IVector3;
-  rot: IQuaternion;
-}
-
-interface IController {
-  id : number;
-  attachmentId : number;
-  pos : IVector3;
-  interactionVolume: IInteractionVolume;
-  rot: IQuaternion;
-  grab: IButtonState;
-  action0: IButtonState;
-
-  ignore: boolean;
-
-  attachment: CONTROLLER_ATTACHMENT_TYPE;
-}
-
-interface IInputData {
-  headset: IHeadset;
-  controllers: IController[];
-}
-
 function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : IController {
   return { pos: Vec3.create()
          , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
@@ -412,32 +252,6 @@ function doesControllerOverlapObject (controller : IController, obj : IEntity, o
                          , _tempVec, obj.interactionVolume);
 }
 
-
-interface IClock {
-  model: IEntity;
-  buttonStates: Map<MODEL_TYPE, IButtonState>;
-  buttonModels: Map<MODEL_TYPE, IEntity>;
-}
-
-
-const enum CONDITION_TYPE {
-  PRESENT, INTERSECT
-}
-
-interface ICondition {
-  type: CONDITION_TYPE;
-}
-
-interface IConditionPresent extends ICondition {
-  entity: IEntity;
-  originalEntityCopy: IEntity;
-}
-
-interface IConditionIntersect extends ICondition {
-  entityA: IEntity;
-  entityB: IEntity;
-}
-
 function makePresentCondition (entity : IEntity) : IConditionPresent {
   return { type: CONDITION_TYPE.PRESENT, entity: entity, originalEntityCopy: cloneEntity(entity) };
 }
@@ -457,27 +271,6 @@ function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
     }
   }
   return false;
-}
-
-const enum ACTION_TYPE {
-  MOVE_BY, DELETE
-}
-
-interface IAction {
-  type: ACTION_TYPE;
-}
-
-interface IActionWithEntity extends IAction {
-  type: ACTION_TYPE;
-  entity: IEntity;
-}
-
-interface IActionMoveBy extends IActionWithEntity {
-  posOffset: IVector3;
-  rotOffset: IQuaternion;
-}
-
-interface IActionDelete extends IActionWithEntity {
 }
 
 function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) : IActionDelete {
@@ -565,28 +358,6 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
                         , entity: moveAlteration.entity
                         , posOffset: deltaPos
                         , rotOffset: deltaRot };
-}
-
-interface IRule {
-  conditions: ICondition[];
-  actions: IAction[];
-  entities: IEntityList;
-}
-
-interface IOven {
-  model: IEntity;
-  buttonStates: Map<MODEL_TYPE, IButtonState>;
-  buttonModels: Map<MODEL_TYPE, IEntity>;
-  rules: IRule[];
-
-  actionIndex: number;
-  lastRule: IRule;
-  currRule: IRule;
-}
-
-interface IShelf {
-  model: IEntity;
-  clonableModels: IEntityList;
 }
 
 function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule {
@@ -917,35 +688,6 @@ function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
   };
 }
 
-const enum ALTERATION_TYPE {
-  MOVE
-, DELETE
-}
-
-interface IAlteration {
-  type: ALTERATION_TYPE;
-  valid: boolean;
-  entitiesList: IEntityList;
-}
-
-interface IControllerMetadata {
-  controller: IController;
-  entityStartPos: IVector3;
-  entityStartRot: IQuaternion;
-  offsetPos: IVector3;
-  offsetRot: IQuaternion;
-}
-
-interface IAlterationMove extends IAlteration {
-  entity: IEntity;
-  controllerMetadata: IControllerMetadata;
-  constraint: GIZMO_VISUALS_FLAGS;
-}
-
-interface IAlterationDelete extends IAlteration {
-  entity: IEntity;
-  controllerMetadata : IControllerMetadata;
-}
 
 // function makeControllerMetadataFromEntityAndController (entity : IEntity, controller : IController) : IControllerMetadata {
 //   const offsetPos : IVector3 = Vec3.create();
@@ -1016,23 +758,6 @@ function makeDeleteAlteration (entity : IEntity, controller : IController, entit
   };
 }
 
-interface IState {
-  globalTime: number;
-  simulationTime: number;
-  simulating: SIMULATION_TYPE;
-  inputData: Map<string,IInputData>;
-  inProgressAlterations: IAlteration[]
-
-  entities: IEntityList;
-  storedEntities: IEntityList;
-  models: IEntityList;
-  clock: IClock;
-  oven: IOven;
-  shelf: IShelf;
-  // latestEntityId: number;
-  segments: ISegment[]
-}
-
 function saveEntitiesToStoredEntities (state : IState) {
   state.storedEntities.entities.length = 0;
   for (let entity of state.entities.entities) {
@@ -1086,7 +811,6 @@ function getInitialState () : IState {
       globalTime: 0
     , simulationTime: 0
     , simulating: SIMULATION_TYPE.PAUSED
-    , inputData: new Map<string,IInputData>()
     , entities: entitiesList
               //  ]
     , storedEntities: makeEntityList(Vec3.create(), Quat.create())
@@ -1132,12 +856,7 @@ function getInitialState () : IState {
 // Quat.copy(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT);
 
 
-interface IEntityList {
-  entities: IEntity[];
-  offsetPos: IVector3;
-  offsetRot: IQuaternion;
-  spatialHash: ISpatialHash<IEntity>;
-}
+
 
 // TODO(JULIAN): Optimize, maybe with a spatial hash
 function getClosestEntityOfListsToPoint (entityLists: IEntityList[], pt : IVector3) : [IEntity|null, IEntityList] {
@@ -1750,11 +1469,6 @@ function clearGizmosForEntityList (entityList : IEntityList) {
   }
 }
 
-
-let _finishedSending : boolean = true;
-let _framesDroppedPerSecond = 0;
-let _frameCounter = 0;
-
 function stepSimulation (controllers : IController[]) {
   // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
   // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
@@ -1802,51 +1516,11 @@ function stepSimulation (controllers : IController[]) {
   // }
 }
 
-function sendState () {
-  sendSimulationTimePromise(STATE.simulationTime).then(() => {
-    BPromise.each(STATE.models.entities, (model) => { return sendEntityPromise(model); }).then(() => {
-      BPromise.each(STATE.entities.entities, (entity) => { return sendEntityPromise(entity); }).then(() => {
-        // XXX(JULIAN): Optimize this so we don't send everything all the time!
-        BPromise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
-        let avatarStuffToSend = [];
-        let controllerAttachmentDataToSend = [];
-        for (let remoteClient of STATE.inputData.keys()) {
-          for (let [client, inputData] of STATE.inputData) {
-            if (remoteClient !== client) {
-              avatarStuffToSend.push({destination: remoteClient, data: inputData})
-            } else {
-              controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
-            }
-            avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
-          }
-        }
-
-        BPromise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
-          BPromise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
-            // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-
-            BPromise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
-              // let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
-              // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
-              // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
-              _finishedSending = true;
-            });
-
-          });
-        });
-
-        // console.log(process.hrtime(DEBUG_start_sending)[0] + " s, " + elapsed.toFixed(3) + " ms ");
-        });
-      });
-    });
-  });
-}
-
 function stepSimulationAndSend () {
   let DEBUG_start_compute = process.hrtime();
 
   let controllers = [];
-  for (let [client, inputData] of STATE.inputData) {
+  for (let [client, inputData] of TRANSIENT_STATE.inputData) {
     for (let controller of inputData.controllers) {
       controllers.push(controller);
     }
@@ -1859,22 +1533,8 @@ function stepSimulationAndSend () {
   }
 
   let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
-  if (!_finishedSending) {
-    _framesDroppedPerSecond++;      
-  } else {
-    let DEBUG_start_sending = process.hrtime();
-    sendState();
-    _finishedSending = false;
-  }
-
-  _frameCounter++;
-  if (_frameCounter >= FPS) {
-    if (_framesDroppedPerSecond > 0) {
-      console.log(`${_framesDroppedPerSecond} frames dropped per second!`);
-      _framesDroppedPerSecond = 0;
-    }
-    _frameCounter = 0;
-  }
+  
+  Transfer.tryTransferState(STATE, TRANSIENT_STATE);
 
   STATE.globalTime += 1/FPS;
 }
@@ -1911,7 +1571,7 @@ NETWORK.on('listening', () => {
 // Grab and store controller data
 NETWORK.on('message', (message : Buffer, remote) => {
   let client = remote.address + ':' + remote.port;
-  let inputData = STATE.inputData;
+  let inputData = TRANSIENT_STATE.inputData;
   if (!inputData.has(client)) {
     console.log(`${client} connected!`);
     inputData.set(client, { headset: makeHeadset()
@@ -1919,42 +1579,44 @@ NETWORK.on('message', (message : Buffer, remote) => {
                                          , makeController(CONTROLLER_ATTACHMENT_TYPE.GRAB) ]});
   }
 
-  let offset = 0;
-  Vec3.set(/*out*/inputData.get(client).headset.pos
+  decodeAvatarMessage(message, 0, /*out*/inputData.get(client).headset, /*out*/inputData.get(client).controllers[0], /*out*/inputData.get(client).controllers[1]);
+});
+
+function decodeAvatarMessage(message: Buffer, offset: number, outHeadset : IHeadset, outControllerLeft : IController, outControllerRight : IController) {
+  Vec3.set(/*out*/outHeadset.pos
           , message.readFloatLE(offset, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/inputData.get(client).headset.rot
+  Quat.set(/*out*/outHeadset.rot
           , message.readFloatLE(offset+=4, true) // w
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
 
-  Vec3.set(/*out*/inputData.get(client).controllers[0].pos
+  Vec3.set(/*out*/outControllerLeft.pos
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/inputData.get(client).controllers[0].rot
+  Quat.set(/*out*/outControllerLeft.rot
           , message.readFloatLE(offset+=4, true) // w
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  inputData.get(client).controllers[0].grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  inputData.get(client).controllers[0].action0.curr = <0|1>message.readUInt8(offset+=1, true);
+  outControllerLeft.grab.curr = <0|1>message.readUInt8(offset+=4, true);
+  outControllerLeft.action0.curr = <0|1>message.readUInt8(offset+=1, true);
 
-  Vec3.set(/*out*/inputData.get(client).controllers[1].pos
+  Vec3.set(/*out*/outControllerRight.pos
           , message.readFloatLE(offset+=1, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/inputData.get(client).controllers[1].rot
+  Quat.set(/*out*/outControllerRight.rot
           , message.readFloatLE(offset+=4, true) // w
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true)
           , message.readFloatLE(offset+=4, true));
-  inputData.get(client).controllers[1].grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  inputData.get(client).controllers[1].action0.curr = <0|1>message.readUInt8(offset+=1, true);
-});
-
+  outControllerRight.grab.curr = <0|1>message.readUInt8(offset+=4, true);
+  outControllerRight.action0.curr = <0|1>message.readUInt8(offset+=1, true);
+}
 
 function serializeState (state) : string {
   const stateType = Object.prototype.toString.call(state);

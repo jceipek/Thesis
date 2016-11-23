@@ -257,6 +257,11 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += MODEL_TYPES.map((modelTypes, index) => `  ${modelTypes.js} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
 
+  output += "export const ATTACHMENT_TYPE_TO_MODEL = {};\n"
+  output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;\n"
+  output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;\n"
+  output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;\n\n"
+
   output += messages.map((message) => jsWriteForMessage(message)).join('\n')+'\n';
 
   return output;
