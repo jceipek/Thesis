@@ -1,7 +1,7 @@
 import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS } from './protocol'
 import * as Protocol from './protocol'
 import * as FS from 'fs'
-import * as Promise from 'bluebird'
+import * as BPromise from 'bluebird'
 import * as DGRAM from 'dgram'
 import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
 import * as SH from './spatialHash'
@@ -75,7 +75,8 @@ const CELL_COUNT = 1024;
 
 
 let _interval : null|NodeJS.Timer = null;
-const _sendBuffer = Buffer.allocUnsafe(1024);
+// const _sendBuffer = Buffer.allocUnsafe(1024);
+const _sendBuffer = Buffer.allocUnsafe(131072);
 const FPS = 90;
 // const FPS = 30;
 let _latestEntityId = 0;
@@ -155,19 +156,19 @@ function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetsc
                                                                                        , entity.gizmoVisuals);
   _currSeqId++;
   sendBroadcast(_sendBuffer, messageLength, () => {
-    Promise.each(entity.children.entities, (child) => { return sendModelDataPromise(pos, rot, scale, child); }).then(() => {
+    BPromise.each(entity.children.entities, (child) => { return sendEntityDataPromise(pos, rot, scale, child); }).then(() => {
       callback();
     })
   });
 }
 
-function sendModel (model : IEntity, callback : () => (err: any, bytes: number) => void) {
-  sendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, model, callback);
+function sendEntity (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
+  sendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity, callback);
 }
 
 function sendEntityList (entityList : IEntityList, callback : () => (err: any, bytes: number) => void) {
   // TODO(JULIAN): Implement scale for entity lists and use it here
-  Promise.each(entityList.entities, (entity) => { return sendModelDataPromise(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity); }).then(() => {
+  BPromise.each(entityList.entities, (entity) => { return sendEntityDataPromise(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity); }).then(() => {
     callback();
   });
 }
@@ -196,13 +197,13 @@ function sendAttachment (destination: string, controllers : IController[], callb
 }
 
 
-const sendModelPromise = Promise.promisify(sendModel);
-const sendModelDataPromise = Promise.promisify(sendEntityData);
-const sendEntityListPromise = Promise.promisify(sendEntityList);
-const sendSegmentPromise = Promise.promisify(sendSegment);
-const sendAvatarInfoPromise = Promise.promisify(sendAvatarInfo);
-const sendSimulationTimePromise = Promise.promisify(sendSimulationTime);
-const sendAttachmentPromise = Promise.promisify(sendAttachment);
+const sendEntityPromise = BPromise.promisify(sendEntity);
+const sendEntityDataPromise = BPromise.promisify(sendEntityData);
+const sendEntityListPromise = BPromise.promisify(sendEntityList);
+const sendSegmentPromise = BPromise.promisify(sendSegment);
+const sendAvatarInfoPromise = BPromise.promisify(sendAvatarInfo);
+const sendSimulationTimePromise = BPromise.promisify(sendSimulationTime);
+const sendAttachmentPromise = BPromise.promisify(sendAttachment);
 
 function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
@@ -1803,10 +1804,10 @@ function stepSimulation (controllers : IController[]) {
 
 function sendState () {
   sendSimulationTimePromise(STATE.simulationTime).then(() => {
-    Promise.each(STATE.models.entities, (model) => { return sendModelPromise(model); }).then(() => {
-      Promise.each(STATE.entities.entities, (entity) => { return sendModelPromise(entity); }).then(() => {
+    BPromise.each(STATE.models.entities, (model) => { return sendEntityPromise(model); }).then(() => {
+      BPromise.each(STATE.entities.entities, (entity) => { return sendEntityPromise(entity); }).then(() => {
         // XXX(JULIAN): Optimize this so we don't send everything all the time!
-        Promise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
+        BPromise.each(STATE.oven.rules, (rule) => { return sendEntityListPromise(rule.entities); }).then(() => {
         let avatarStuffToSend = [];
         let controllerAttachmentDataToSend = [];
         for (let remoteClient of STATE.inputData.keys()) {
@@ -1820,11 +1821,11 @@ function sendState () {
           }
         }
 
-        Promise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
-          Promise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
+        BPromise.each(avatarStuffToSend, (destAndInputData) => { return sendAvatarInfoPromise(destAndInputData.destination, destAndInputData.data); }).then(() => {
+          BPromise.each(controllerAttachmentDataToSend, (destAndControllers) => { return sendAttachmentPromise(destAndControllers.destination, destAndControllers.data); }).then(() => {
             // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
-            Promise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
+            BPromise.each(STATE.segments, (segment) => { return sendSegmentPromise(segment); }).then(() => {
               // let sending_elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
               // console.log(`{compute: ${compute_elapsed}, sending: ${sending_elapsed}}`);
               // console.log(`DBG>>${compute_elapsed}\t ${sending_elapsed}`);
@@ -1878,6 +1879,24 @@ function stepSimulationAndSend () {
   STATE.globalTime += 1/FPS;
 }
 
+
+// async function printDelayed(elements: string[]) {
+//     for (const element of elements) {
+//         await delay(200);
+//         console.log(element);
+//     }
+// }
+
+// async function delay(milliseconds: number) {
+//     return new Promise<void>(resolve => {
+//         setTimeout(resolve, milliseconds);
+//     });
+// }
+
+// printDelayed(["Hello", "beautiful", "asynchronous", "world"]).then(() => {
+//     console.log();
+//     console.log("Printed every element!");
+// });
 
 NETWORK.bind(undefined, undefined, () => {
   NETWORK.setBroadcast(true);
