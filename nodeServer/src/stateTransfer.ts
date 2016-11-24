@@ -49,6 +49,7 @@ import {
 , IDENT_QUAT
 , BASE_COLOR
 } from './constants'
+import { PERFORMANCE_TRACKER, nanosecondsFromElapsedDelta } from './instrumentation'
 
 
 let _currSeqId = 0;
@@ -68,33 +69,8 @@ function sendTarget (message : Buffer, messageLength: number, host: string, port
   NETWORK.send(message, 0, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
-function sendAvatarInfo (destination: string, inputData : IInputData, callback : () => (err: any, bytes: number) => void) {
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  let [host, portString] = destination.split(':');
-  let port = parseInt(portString, 10);
-  let controller0 = inputData.controllers[0];
-  let controller1 = inputData.controllers[1];
-  sendTarget(_sendBuffer, messageLength, host, port, () => {
-    const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-    _currSeqId++;
-    sendTarget(_sendBuffer, messageLength, host, port, () => {
-      const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-      _currSeqId++;
-      sendTarget(_sendBuffer, messageLength, host, port, () => {
-        const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3,
-         true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-         _currSeqId++;
-        sendTarget(_sendBuffer, messageLength, host, port, () => {
-          const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3,
-          true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-          _currSeqId++;
-          sendTarget(_sendBuffer, messageLength, host, port, callback);
-        });
-      });
-    });
-  });
-}
+const sendBroadcastPromise = BPromise.promisify(sendBroadcast);
+const sendTargetPromise = BPromise.promisify(sendTarget);
 
 async function asyncSendAvatarInfo (destination: string, inputData : IInputData) : Promise<number> {
   let dataCount = 0;
@@ -123,34 +99,6 @@ async function asyncSendAvatarInfo (destination: string, inputData : IInputData)
   dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
 
   return dataCount;
-}
-
-function sendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity, callback : () => (err: any, bytes: number) => void) {  
-  const rot = Quat.mul(/*out*/Quat.create()
-                      , offsetrot, entity.rot);
-  let temp = Vec3.create();
-  const pos = Vec3.add(/*out*/temp
-                      , offsetpos, Vec3.transformQuat(/*out*/temp
-                                                     , entity.pos, offsetrot));
-  const scale = Vec3.mul(/*out*/Vec3.create()
-                        , entity.scale, offsetscale);
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                       , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                       , _currSeqId
-                                                                                       , entity.id
-                                                                                       , entity.type
-                                                                                       , pos
-                                                                                       , rot
-                                                                                       , scale
-                                                                                       , entity.visible && !entity.deleted 
-                                                                                       , entity.tint
-                                                                                       , entity.gizmoVisuals);
-  _currSeqId++;
-  sendBroadcast(_sendBuffer, messageLength, () => {
-    BPromise.each(entity.children.entities, (child) => { return sendEntityDataPromise(pos, rot, scale, child); }).then(() => {
-      callback();
-    })
-  });
 }
 
 async function asyncSendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) : Promise<number> {  
@@ -182,19 +130,8 @@ async function asyncSendEntityData (offsetpos : IVector3, offsetrot : IQuaternio
   return dataCount;
 }
 
-function sendEntity (entity : IEntity, callback : () => (err: any, bytes: number) => void) {
-  sendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity, callback);
-}
-
 async function asyncSendEntity (entity : IEntity) : Promise<number> {
   return asyncSendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity);
-}
-
-function sendEntityList (entityList : IEntityList, callback : () => (err: any, bytes: number) => void) {
-  // TODO(JULIAN): Implement scale for entity lists and use it here
-  BPromise.each(entityList.entities, (entity) => { return sendEntityDataPromise(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity); }).then(() => {
-    callback();
-  });
 }
 
 async function asyncSendEntityList (entityList : IEntityList) : Promise<number> {
@@ -206,33 +143,22 @@ async function asyncSendEntityList (entityList : IEntityList) : Promise<number> 
   return dataCount;
 }
 
-function sendSegment (segment : ISegment, callback : () => (err: any, bytes: number) => void) {
+async function asyncSendSegment (segment : ISegment) : Promise<number> {
   const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
-  sendBroadcast(_sendBuffer, messageLength, callback);
+  return await sendBroadcastPromise(_sendBuffer, messageLength);
 }
 
 const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
-function sendAttachment (destination: string, controllers : IController[], callback : () => (err: any, bytes: number) => void) {
+async function asyncSendAttachment (destination: string, controllers : IController[]) : Promise<number> {
   const [host, portString] = destination.split(':');
   const port = parseInt(portString, 10);
   _controllerAttachmentsBuffer[0] = controllers[0].attachment;
   _controllerAttachmentsBuffer[1] = controllers[1].attachment;
   const messageLength = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, 0, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
   _currSeqId++;
-  sendTarget(_sendBuffer, messageLength, host, port, callback);
+  return sendTargetPromise(_sendBuffer, messageLength, host, port);
 }
-
-
-
-const sendBroadcastPromise = BPromise.promisify(sendBroadcast);
-const sendTargetPromise = BPromise.promisify(sendTarget);
-const sendEntityPromise = BPromise.promisify(sendEntity);
-const sendEntityDataPromise = BPromise.promisify(sendEntityData);
-const sendEntityListPromise = BPromise.promisify(sendEntityList);
-const sendSegmentPromise = BPromise.promisify(sendSegment);
-const sendAvatarInfoPromise = BPromise.promisify(sendAvatarInfo);
-const sendAttachmentPromise = BPromise.promisify(sendAttachment);
 
 async function asyncSendSimulationTime (time : number) : Promise<number> {
   const messageLength = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, 0, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
@@ -240,9 +166,11 @@ async function asyncSendSimulationTime (time : number) : Promise<number> {
   return sendBroadcastPromise(_sendBuffer, messageLength);
 }
 
-
 let _finishedSending : boolean = true;
 async function sendState (state : IState, transientState : ITransientState) {
+  let DEBUG_start_sending = process.hrtime();
+  let startFrame = PERFORMANCE_TRACKER.currFrame;
+
   await asyncSendSimulationTime(state.simulationTime);
   for (let model of state.models.entities) {
     await asyncSendEntity(model);
@@ -274,12 +202,17 @@ async function sendState (state : IState, transientState : ITransientState) {
   }
 
   for (let destAndControllers of controllerAttachmentDataToSend) {
-    await sendAttachmentPromise(destAndControllers.destination, destAndControllers.data);
+    await asyncSendAttachment(destAndControllers.destination, destAndControllers.data);
   }
 
   for (let segment of state.segments) {
-    await sendSegmentPromise(segment);
+    await asyncSendSegment(segment);
   }
+
+
+  PERFORMANCE_TRACKER[startFrame].transferTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_sending));
+
+  // console.log(`Benchmark took ${diff[0] * 1e9 + diff[1]} nanoseconds`);
 
   // let elapsed = process.hrtime(DEBUG_start_sending)[1] / 1000000;
 
@@ -297,9 +230,8 @@ export function tryTransferState (state : IState, transientState : ITransientSta
   if (!_finishedSending) {
     _framesDroppedPerSecond++;      
   } else {
-    let DEBUG_start_sending = process.hrtime();
-    sendState(state, transientState);
     _finishedSending = false;
+    sendState(state, transientState);
   }
 
   _frameCounter++;

@@ -50,6 +50,7 @@ import {
 , BASE_COLOR
 } from './constants'
 import * as Transfer from './stateTransfer'
+import { PERFORMANCE_TRACKER, nanosecondsFromElapsedDelta, countObjects } from './instrumentation'
 
 type IVector3 = Vec3;
 type IQuaternion = Quat;
@@ -73,7 +74,6 @@ const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.517
 
 const STATE : IState = getInitialState();
 const TRANSIENT_STATE : ITransientState = { inputData: new Map<string,IInputData>() };
-
 
 function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
@@ -1516,7 +1516,12 @@ function stepSimulation (controllers : IController[]) {
   // }
 }
 
+
 function stepSimulationAndSend () {
+  if (PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame] === undefined) {
+    PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame] = {};
+  }
+
   let DEBUG_start_compute = process.hrtime();
 
   let controllers = [];
@@ -1532,11 +1537,17 @@ function stepSimulationAndSend () {
     controller.action0.last = controller.action0.curr;
   }
 
-  let compute_elapsed = process.hrtime(DEBUG_start_compute)[1] / 1000000;
+  PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame].objectCount = countObjects(STATE);
+  PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame].computeTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_compute));
   
   Transfer.tryTransferState(STATE, TRANSIENT_STATE);
 
+  if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
+    STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+  }
+
   STATE.globalTime += 1/FPS;
+  PERFORMANCE_TRACKER.currFrame++;
 }
 
 
@@ -1718,6 +1729,10 @@ function deserializeStateObject (stateObject) : IState {
 
 process.on('SIGINT', () => {
   clearInterval(_interval);
+
+  for (let i = 0; i < PERFORMANCE_TRACKER.currFrame; i++) {
+    console.log(`${PERFORMANCE_TRACKER[i].computeTime}\t${PERFORMANCE_TRACKER[i].transferTime}\t${PERFORMANCE_TRACKER[i].objectCount}`);
+  }
 
   // FS.writeFile(`persistentState${(new Date()).getTime()}.json`, serializeState({_latestEntityId: _latestEntityId, STATE: STATE}), function(err) {
   //   if(err) {
