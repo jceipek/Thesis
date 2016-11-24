@@ -11,6 +11,7 @@ public class NetManager : MonoBehaviour {
     public static NetManager G = null; 
     [SerializeField] string _serverIPAddress = "127.0.0.1";
     [SerializeField] int _ioPort = 8053;
+    [SerializeField] int _serverPort = 8054;
     [SerializeField] MessageHandler _messageHandler;
 
     Socket _clientSock = new Socket(AddressFamily.InterNetwork, // IPv4
@@ -57,7 +58,7 @@ public class NetManager : MonoBehaviour {
             _sendBufferStream = new MemoryStream(_sendBuffer);
             _sendBufferWriter = new BinaryWriter(_sendBufferStream);
 
-            _servIPEP = new IPEndPoint(IPAddress.Parse(_serverIPAddress), port: _ioPort);
+            _servIPEP = new IPEndPoint(IPAddress.Parse(_serverIPAddress), port: _serverPort);
             _servEP = (EndPoint)_servIPEP;
 
             _clientIPEP = new IPEndPoint(IPAddress.Any, _ioPort);

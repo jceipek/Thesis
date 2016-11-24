@@ -62,15 +62,23 @@ const PORT = 8053;
 const HOST = '127.0.0.1';
 
 function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
+  // console.log(`SBFrom ${0}:${messageLength}`)
   NETWORK.send(message, 0, messageLength, PORT, HOST, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
 function sendTarget (message : Buffer, messageLength: number, host: string, port: number, callback : (err: any, bytes: number) => void) {
+  // console.log(`STFrom ${0}:${messageLength}`)
   NETWORK.send(message, 0, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
+}
+
+function doSend (message : Buffer, offset: number, messageLength: number, port: number, host: string, callback : (err: any, bytes: number) => void) {
+  // console.log(`From ${offset}:${offset+messageLength}`)
+  NETWORK.send(message, offset, messageLength, port, host, callback); // NOTE(Julian): Buffer can't be reused until callback has been called
 }
 
 const sendBroadcastPromise = BPromise.promisify(sendBroadcast);
 const sendTargetPromise = BPromise.promisify(sendTarget);
+const sendPromise = BPromise.promisify(doSend);
 
 async function asyncSendAvatarInfo (destination: string, inputData : IInputData) : Promise<number> {
   let dataCount = 0;
@@ -101,7 +109,7 @@ async function asyncSendAvatarInfo (destination: string, inputData : IInputData)
   return dataCount;
 }
 
-async function asyncSendEntityData (offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) : Promise<number> {  
+function asyncSendEntityData (deferredPromises : BPromise<number>[], offset: number, offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) : number {  
   const rot = Quat.mul(/*out*/Quat.create()
                       , offsetrot, entity.rot);
   let temp = Vec3.create();
@@ -110,43 +118,46 @@ async function asyncSendEntityData (offsetpos : IVector3, offsetrot : IQuaternio
                                                      , entity.pos, offsetrot));
   const scale = Vec3.mul(/*out*/Vec3.create()
                         , entity.scale, offsetscale);
-  const messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                       , 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                       , _currSeqId
-                                                                                       , entity.id
-                                                                                       , entity.type
-                                                                                       , pos
-                                                                                       , rot
-                                                                                       , scale
-                                                                                       , entity.visible && !entity.deleted 
-                                                                                       , entity.tint
-                                                                                       , entity.gizmoVisuals);
+  let newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
+                                                                                 , offset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
+                                                                                 , _currSeqId
+                                                                                 , entity.id
+                                                                                 , entity.type
+                                                                                 , pos
+                                                                                 , rot
+                                                                                 , scale
+                                                                                 , entity.visible && !entity.deleted 
+                                                                                 , entity.tint
+                                                                                 , entity.gizmoVisuals);
+
+  const messageLength = newOffset - offset;
   _currSeqId++;
-  let dataCount = 0;
-  dataCount += await sendBroadcastPromise(_sendBuffer, messageLength);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, messageLength, PORT, HOST));
   for (let child of entity.children.entities) {
-      dataCount += await asyncSendEntityData(pos, rot, scale, child);
+      newOffset = asyncSendEntityData(deferredPromises, newOffset, pos, rot, scale, child);
   }
-  return dataCount;
+  return newOffset;
 }
 
-async function asyncSendEntity (entity : IEntity) : Promise<number> {
-  return asyncSendEntityData(NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity);
+function asyncSendEntity (deferredPromises : BPromise<number>[], offset: number, entity : IEntity) : number {
+  return asyncSendEntityData(deferredPromises, offset, NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity);
 }
 
-async function asyncSendEntityList (entityList : IEntityList) : Promise<number> {
+function asyncSendEntityList (deferredPromises : BPromise<number>[], offset: number, entityList : IEntityList) : number {
   // TODO(JULIAN): Implement scale for entity lists and use it here
   let dataCount = 0;
   for (let entity of entityList.entities) {
-      dataCount += await asyncSendEntityData(entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity);
+      offset = asyncSendEntityData(deferredPromises, offset, entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity);
   }
-  return dataCount;
+  return offset;
 }
 
-async function asyncSendSegment (segment : ISegment) : Promise<number> {
-  const messageLength = Protocol.fillBufferWithSegmentMsg(_sendBuffer, 0, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
+async function asyncSendSegment (offset: number, segment : ISegment) : Promise<number> {
+  const newOffset = Protocol.fillBufferWithSegmentMsg(_sendBuffer, offset, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
-  return await sendBroadcastPromise(_sendBuffer, messageLength);
+  const messageLength = newOffset - offset;
+  // return sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);
+  return sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);//sendBroadcastPromise(_sendBuffer, messageLength);
 }
 
 const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
@@ -160,29 +171,38 @@ async function asyncSendAttachment (destination: string, controllers : IControll
   return sendTargetPromise(_sendBuffer, messageLength, host, port);
 }
 
-async function asyncSendSimulationTime (time : number) : Promise<number> {
-  const messageLength = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, 0, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
+function sendSimulationTime (deferredPromises : BPromise<number>[], offset: number, time : number) : number {
+  const newOffset = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, offset, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
+  const messageLength = newOffset - offset;
   _currSeqId++;
-  return sendBroadcastPromise(_sendBuffer, messageLength);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, messageLength, PORT, HOST));
+  return newOffset;
 }
 
 let _finishedSending : boolean = true;
 async function sendState (state : IState, transientState : ITransientState) {
+  // console.log(">>>>>SEND");
   let DEBUG_start_sending = process.hrtime();
   let startFrame = PERFORMANCE_TRACKER.currFrame;
 
-  await asyncSendSimulationTime(state.simulationTime);
+  let offset = 0;
+  let promise = null;
+  let promises = [];
+
+  offset = sendSimulationTime(promises, offset, state.simulationTime);
   for (let model of state.models.entities) {
-    await asyncSendEntity(model);
+    offset = asyncSendEntity(promises, offset, model);
   }
   for (let entity of state.entities.entities) {
-    await asyncSendEntity(entity);
+    offset = asyncSendEntity(promises, offset, entity);
   }
 
   // XXX(JULIAN): Optimize this so we don't send everything all the time!
   for (let rule of state.oven.rules) {
-    await asyncSendEntityList(rule.entities);
+    offset = asyncSendEntityList(promises, offset, rule.entities);
   }
+
+  await BPromise.all(promises);
 
   let avatarStuffToSend = [];
   let controllerAttachmentDataToSend = [];
@@ -206,7 +226,7 @@ async function sendState (state : IState, transientState : ITransientState) {
   }
 
   for (let segment of state.segments) {
-    await asyncSendSegment(segment);
+    await asyncSendSegment(offset, segment);
   }
 
 

@@ -1542,34 +1542,16 @@ function stepSimulationAndSend () {
   
   Transfer.tryTransferState(STATE, TRANSIENT_STATE);
 
-  if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
-    STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
-  }
+  // NOTE(JULIAN): This is for performance testing -- create an object every .5s
+  // if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
+  //   STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame/100,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+  // }
 
   STATE.globalTime += 1/FPS;
   PERFORMANCE_TRACKER.currFrame++;
 }
 
-
-// async function printDelayed(elements: string[]) {
-//     for (const element of elements) {
-//         await delay(200);
-//         console.log(element);
-//     }
-// }
-
-// async function delay(milliseconds: number) {
-//     return new Promise<void>(resolve => {
-//         setTimeout(resolve, milliseconds);
-//     });
-// }
-
-// printDelayed(["Hello", "beautiful", "asynchronous", "world"]).then(() => {
-//     console.log();
-//     console.log("Printed every element!");
-// });
-
-NETWORK.bind(undefined, undefined, () => {
+NETWORK.bind(8054, undefined, () => {
   NETWORK.setBroadcast(true);
   _interval = setInterval(stepSimulationAndSend, 1000/FPS);
 });

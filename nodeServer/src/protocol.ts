@@ -181,4 +181,3 @@ export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : nu
   offset = buf.writeInt8(controllerAttachments[1], offset, true);
   return offset;
 }
-
