@@ -34,15 +34,15 @@ Make sure you have `node` and `Typescript` installed.
 Run `cd nodeServer; npm install`.
 
 Then modify `const HOST = '192.168.1.255';`
-on [line 65 of `nodeServer/src/client.ts`](https://github.com/jceipek/Thesis/blob/jc-kitchen/nodeServer/src/client.ts#L65)
+on [line 61 of `nodeServer/src/stateTransfer.ts`](https://github.com/jceipek/Thesis/blob/jc-kitchen/nodeServer/src/stateTransfer.ts#L61)
 to match your subnet (or change it to localhost: `const HOST = '127.0.0.1';`).
 
-After installing Typescript, run `tsc --watch` to compile the changes and generate `nodeServer/js/client.js`
-Now you can run `cd nodeServer/js/; node client.js` to launch the server (Yes, it is called 'client' instead of 'server', sorry). 
+After installing Typescript, run `tsc --watch` to compile the changes and generate `nodeServer/js/main.js`
+Now you can run `cd nodeServer/js/; node main.js` to launch the server. 
 
 ### Running the client (If you have an HTC VIVE):
 Make sure [SteamVR](https://support.steampowered.com/kb_article.php?ref=2001-UXCM-4439) is installed and launched.
 Open `SyncDemo/Assets/Demo 1` in Unity. Click play.
 
 ### Running the client (Without a VR headset):
-Open `SyncDemo/Assets/Demo 1` in Unity. Uncheck `[CameraRig]` in the Hierarchy. Click play.
+Open `SyncDemo/Assets/DebugEnvironment` in Unity. Click play.

@@ -58,8 +58,8 @@ const _sendBuffer = Buffer.allocUnsafe(131072);
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   // console.log(`SBFrom ${0}:${messageLength}`)
@@ -80,33 +80,35 @@ const sendBroadcastPromise = BPromise.promisify(sendBroadcast);
 const sendTargetPromise = BPromise.promisify(sendTarget);
 const sendPromise = BPromise.promisify(doSend);
 
-async function asyncSendAvatarInfo (destination: string, inputData : IInputData) : Promise<number> {
+function asyncSendAvatarInfo (deferredPromises : BPromise<number>[], offset: number, destination: string, inputData : IInputData) : number {
   let dataCount = 0;
-  let messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  let newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, offset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
+
   let [host, portString] = destination.split(':');
   let port = parseInt(portString, 10);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
+
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
-  dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
   
-  messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
-  dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
 
-  messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
-  dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
 
-  messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
-  dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
 
-  messageLength = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, 0, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
   _currSeqId++;
-  dataCount += await sendTargetPromise(_sendBuffer, messageLength, host, port);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
 
-  return dataCount;
+  return newOffset;
 }
 
 function asyncSendEntityData (deferredPromises : BPromise<number>[], offset: number, offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) : number {  
@@ -152,23 +154,24 @@ function asyncSendEntityList (deferredPromises : BPromise<number>[], offset: num
   return offset;
 }
 
-async function asyncSendSegment (offset: number, segment : ISegment) : Promise<number> {
+function asyncSendSegment (deferredPromises : BPromise<number>[], offset: number, segment : ISegment) : number {
   const newOffset = Protocol.fillBufferWithSegmentMsg(_sendBuffer, offset, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
   _currSeqId++;
   const messageLength = newOffset - offset;
-  // return sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);
-  return sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);//sendBroadcastPromise(_sendBuffer, messageLength);
+  sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);
+  return newOffset;
 }
 
 const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
-async function asyncSendAttachment (destination: string, controllers : IController[]) : Promise<number> {
+function asyncSendAttachment (deferredPromises : BPromise<number>[], offset: number, destination: string, controllers : IController[]) : number {
   const [host, portString] = destination.split(':');
   const port = parseInt(portString, 10);
   _controllerAttachmentsBuffer[0] = controllers[0].attachment;
   _controllerAttachmentsBuffer[1] = controllers[1].attachment;
-  const messageLength = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, 0, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
+  const newOffset = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, offset, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
   _currSeqId++;
-  return sendTargetPromise(_sendBuffer, messageLength, host, port);
+  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host));
+  return newOffset;
 }
 
 function sendSimulationTime (deferredPromises : BPromise<number>[], offset: number, time : number) : number {
@@ -202,8 +205,6 @@ async function sendState (state : IState, transientState : ITransientState) {
     offset = asyncSendEntityList(promises, offset, rule.entities);
   }
 
-  await BPromise.all(promises);
-
   let avatarStuffToSend = [];
   let controllerAttachmentDataToSend = [];
   for (let remoteClient of transientState.inputData.keys()) {
@@ -218,19 +219,23 @@ async function sendState (state : IState, transientState : ITransientState) {
   }
 
   for (let destAndInputData of avatarStuffToSend) {
-    await asyncSendAvatarInfo(destAndInputData.destination, destAndInputData.data);
+    offset = asyncSendAvatarInfo(promises, offset, destAndInputData.destination, destAndInputData.data);
   }
 
+
   for (let destAndControllers of controllerAttachmentDataToSend) {
-    await asyncSendAttachment(destAndControllers.destination, destAndControllers.data);
+    asyncSendAttachment(promises, offset, destAndControllers.destination, destAndControllers.data);
   }
 
   for (let segment of state.segments) {
-    await asyncSendSegment(offset, segment);
+    asyncSendSegment(promises, offset, segment);
   }
 
+  PERFORMANCE_TRACKER[startFrame].preTransferTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_sending));
 
-  PERFORMANCE_TRACKER[startFrame].transferTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_sending));
+  await BPromise.all(promises);
+
+  PERFORMANCE_TRACKER[startFrame].transferTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_sending)) - PERFORMANCE_TRACKER[startFrame].preTransferTime;
 
   // console.log(`Benchmark took ${diff[0] * 1e9 + diff[1]} nanoseconds`);
 

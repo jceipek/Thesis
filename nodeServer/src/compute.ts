@@ -7,6 +7,9 @@ import { ISpatialHash } from './spatialHash'
 import { usleep } from 'sleep'
 import {
   IState
+, IVector3
+, IQuaternion
+, IColor
 , ITransientState
 , IEntityList
 , IEntity
@@ -52,19 +55,12 @@ import {
 import * as Transfer from './stateTransfer'
 import { PERFORMANCE_TRACKER, nanosecondsFromElapsedDelta, countObjects } from './instrumentation'
 
-type IVector3 = Vec3;
-type IQuaternion = Quat;
-type IColor = Uint8Array;
-
 const _tempQuat = Quat.create();
 const _tempVec = Vec3.create();
 
+let _latestEntityId = 0;
 const CELL_SIZE = 1;
 const CELL_COUNT = 1024;
-
-
-let _interval : null|NodeJS.Timer = null;
-let _latestEntityId = 0;
 
 const CLOCK_BUTTON_BASE_ROT = Quat.fromValues(-0.7071068, 0, 0, 0.7071068);
 const CLOCK_BUTTON_FLIPPED_ROT = Quat.fromValues(0.7071068, 0, 0, 0.7071068);
@@ -72,8 +68,7 @@ const CLOCK_BUTTON_FLIPPED_ROT = Quat.fromValues(0.7071068, 0, 0, 0.7071068);
 const OVEN_BUTTON_BASE_ROT = Quat.fromValues(-0.8580354, 3.596278e-17, -4.186709e-17, 0.5135907);
 const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.5170867, -4.186709e-17);
 
-const STATE : IState = getInitialState();
-const TRANSIENT_STATE : ITransientState = { inputData: new Map<string,IInputData>() };
+export const STATE : IState = getInitialState();
 
 function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
@@ -208,7 +203,7 @@ function makeSegment (start : IVector3, end : IVector3, color: IColor) : ISegmen
   };
 }
 
-function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : IController {
+export function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : IController {
   return { pos: Vec3.create()
          , interactionVolume: <IInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.075 }
          , rot: Quat.create()
@@ -220,7 +215,7 @@ function makeController (startingAttachment : CONTROLLER_ATTACHMENT_TYPE) : ICon
          , attachment: startingAttachment };
 }
 
-function makeHeadset () : IHeadset {
+export function makeHeadset () : IHeadset {
   return { pos: Vec3.create()
          , rot: Quat.create()
          , id: _latestEntityId++ };
@@ -1469,7 +1464,7 @@ function clearGizmosForEntityList (entityList : IEntityList) {
   }
 }
 
-function stepSimulation (controllers : IController[]) {
+export function stepSimulation (controllers : IController[]) {
   // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
   // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
@@ -1514,101 +1509,6 @@ function stepSimulation (controllers : IController[]) {
   // for (let entity of STATE.entities.entities) {
   //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
   // }
-}
-
-
-function stepSimulationAndSend () {
-  if (PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame] === undefined) {
-    PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame] = {};
-  }
-
-  let DEBUG_start_compute = process.hrtime();
-
-  let controllers = [];
-  for (let [client, inputData] of TRANSIENT_STATE.inputData) {
-    for (let controller of inputData.controllers) {
-      controllers.push(controller);
-    }
-  }
-  stepSimulation(controllers); // S_t -> S_t+1
-  for (let controller of controllers) {
-    if (controller.ignore) { continue; }
-    controller.grab.last = controller.grab.curr; // So that we can grab things
-    controller.action0.last = controller.action0.curr;
-  }
-
-  PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame].objectCount = countObjects(STATE);
-  PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame].computeTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_compute));
-  
-  Transfer.tryTransferState(STATE, TRANSIENT_STATE);
-
-  // NOTE(JULIAN): This is for performance testing -- create an object every .5s
-  // if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
-  //   STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame/100,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
-  // }
-
-  STATE.globalTime += 1/FPS;
-  PERFORMANCE_TRACKER.currFrame++;
-}
-
-NETWORK.bind(8054, undefined, () => {
-  NETWORK.setBroadcast(true);
-  _interval = setInterval(stepSimulationAndSend, 1000/FPS);
-});
-
-NETWORK.on('listening', () => {
-    let address = NETWORK.address();
-    console.log('UDP Server listening on ' + address.address + ":" + address.port);
-});
-
-// Grab and store controller data
-NETWORK.on('message', (message : Buffer, remote) => {
-  let client = remote.address + ':' + remote.port;
-  let inputData = TRANSIENT_STATE.inputData;
-  if (!inputData.has(client)) {
-    console.log(`${client} connected!`);
-    inputData.set(client, { headset: makeHeadset()
-                          , controllers: [ makeController(CONTROLLER_ATTACHMENT_TYPE.DELETE)
-                                         , makeController(CONTROLLER_ATTACHMENT_TYPE.GRAB) ]});
-  }
-
-  decodeAvatarMessage(message, 0, /*out*/inputData.get(client).headset, /*out*/inputData.get(client).controllers[0], /*out*/inputData.get(client).controllers[1]);
-});
-
-function decodeAvatarMessage(message: Buffer, offset: number, outHeadset : IHeadset, outControllerLeft : IController, outControllerRight : IController) {
-  Vec3.set(/*out*/outHeadset.pos
-          , message.readFloatLE(offset, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/outHeadset.rot
-          , message.readFloatLE(offset+=4, true) // w
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-
-  Vec3.set(/*out*/outControllerLeft.pos
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/outControllerLeft.rot
-          , message.readFloatLE(offset+=4, true) // w
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-  outControllerLeft.grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  outControllerLeft.action0.curr = <0|1>message.readUInt8(offset+=1, true);
-
-  Vec3.set(/*out*/outControllerRight.pos
-          , message.readFloatLE(offset+=1, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-  Quat.set(/*out*/outControllerRight.rot
-          , message.readFloatLE(offset+=4, true) // w
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true)
-          , message.readFloatLE(offset+=4, true));
-  outControllerRight.grab.curr = <0|1>message.readUInt8(offset+=4, true);
-  outControllerRight.action0.curr = <0|1>message.readUInt8(offset+=1, true);
 }
 
 function serializeState (state) : string {
@@ -1708,25 +1608,3 @@ function deserializeStateObject (stateObject) : IState {
   let res = <IState>deserializeStateObjectElement(stateObject.content.STATE);
   return res;
 }
-
-process.on('SIGINT', () => {
-  clearInterval(_interval);
-
-  for (let i = 0; i < PERFORMANCE_TRACKER.currFrame; i++) {
-    console.log(`${PERFORMANCE_TRACKER[i].computeTime}\t${PERFORMANCE_TRACKER[i].transferTime}\t${PERFORMANCE_TRACKER[i].objectCount}`);
-  }
-
-  // FS.writeFile(`persistentState${(new Date()).getTime()}.json`, serializeState({_latestEntityId: _latestEntityId, STATE: STATE}), function(err) {
-  //   if(err) {
-  //       return console.log(err);
-  //   }
-
-  //   console.log("Saved State to JSON");
-  //   setTimeout(() => {
-  //     process.exit();
-  //   }, 1000);
-  // });
-
-  process.exit();
-  console.log("NOT SAVING TO JSON!");
-});
