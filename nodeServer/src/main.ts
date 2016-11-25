@@ -126,7 +126,7 @@ function decodeAvatarMessage(message: Buffer, offset: number, outHeadset : IHead
 
 process.on('SIGINT', () => {
   clearInterval(_interval);
-
+  console.log(`>>>>>>>>>>PERFORMANCE METRICS<<<<<<<<<<<`)
   console.log(`Compute Time\tPrepare Send Time\tSend Time\tTotal Transfer Time\tObject Count`);
   for (let i = 0; i < PERFORMANCE_TRACKER.currFrame; i++) {
     console.log(`${PERFORMANCE_TRACKER[i].computeTime}\t${PERFORMANCE_TRACKER[i].preTransferTime}\t${PERFORMANCE_TRACKER[i].transferTime}\t${PERFORMANCE_TRACKER[i].preTransferTime+PERFORMANCE_TRACKER[i].transferTime}\t${PERFORMANCE_TRACKER[i].objectCount}`);
