@@ -1,13 +1,17 @@
 import net
 import posix #for usleep
 import streams
+import math
+import times
+
+GC_disable()
 
 var socket = newSocket(Domain.AF_INET, SockType.SOCK_DGRAM, Protocol.IPPROTO_UDP, true)
 bindAddr(socket, Port(0), "")
+setSockOpt(socket, SOBool.OptBroadcast, true, SOL_SOCKET)
 
 var myStream : StringStream = newStringStream()
 
-#55
 type
     MessageKind = enum
         PosRotScaleVisibleTint = 0x03
@@ -58,63 +62,72 @@ proc addEntity (s: Stream, entity: Entity) : int =
 const MAX_MSG_SIZE = 55
 var buffer = alloc(MAX_MSG_SIZE)
 
-var entities = newSeqofCap[Entity](2)
-entities.add(Entity(id: 0,
-                   modelType: ModelType.MT_Cube,
-                   pos: (0'f32,0'f32,0'f32),
-                   rot: (0'f32,0'f32,0'f32,1'f32),
-                   scale: (1'f32,1'f32,1'f32),
-                   visible: true,
-                   tint: (0'u8,255'u8,0'u8,255'u8)))
-entities.add(Entity(id: 1,
-                   modelType: ModelType.MT_Cube,
-                   pos: (1'f32,0'f32,0'f32),
-                   rot: (0'f32,0'f32,0'f32,1'f32),
-                   scale: (1'f32,1'f32,1'f32),
-                   visible: true,
-                   tint: (0'u8,255'u8,0'u8,255'u8)))
+
+var entities = newSeqofCap[Entity](1000)
+for i in 0..200:
+    var num : uint16 = cast[uint16](i.toU16())
+    var posX : float32 = i.toFloat() 
+    entities.add(Entity(id: num,
+                    modelType: ModelType.MT_Cube,
+                    pos: (0.2'f32 * posX,0'f32,0'f32),
+                    rot: (0'f32,0'f32,0'f32,1'f32),
+                    scale: (1'f32,1'f32,1'f32),
+                    visible: true,
+                    tint: (0'u8,255'u8,0'u8,255'u8)))
+
+var totalTimeForSending : float = 0
+var totalTimeForCopying : float = 0
 
 proc sendEntity(s: Socket, address: string, port: Port, stream: Stream, buffer: pointer, entity: Entity) : int =
+    var startTime = cpuTime()
+    
     stream.setPosition(0)
     var size = stream.addEntity(entity)
     stream.setPosition(0)
     discard stream.readData(buffer, size)
-    return s.sendTo(address, port, buffer, size)
+
+    totalTimeForCopying += (cpuTime() - startTime)
+
+    startTime = cpuTime()
+    result = s.sendTo(address, port, buffer, size)
+    totalTimeForSending += (cpuTime() - startTime) 
+
+var timer : int = 0
+
+const FPS : float = 1/90
+const FPS_MS : float = FPS * 1000
+
+const DEST_PORT = Port(8053)
+const DEST_ADDR = "192.168.1.255"
+# const DEST_ADDR = "127.0.0.1"
 
 while true:
-    for ent in entities:
-        var result = socket.sendEntity("127.0.0.1", Port(8053), myStream, buffer, ent)
+    let startTimeSeconds = epochTime()
+
+    for ent in entities.mitems:
+        ent.pos.y = sin(timer.toFloat()*0.1)
+
+    totalTimeForSending = 0
+    totalTimeForCopying = 0
+    for ent in entities.mitems:
+        var result = socket.sendEntity(DEST_ADDR, DEST_PORT, myStream, buffer, ent)
         if result == -1:
             var e = getSocketError(socket)
             echo "socket error:"
             echo e
     
-    if usleep(1000*1000) != 0: # 1000ms
-        echo "errno"
-        echo errno
+    echo totalTimeForSending*1000, '\t', totalTimeForCopying*1000
+
+    GC_step(2000, true) # 2ms
+
+    let deltaTimeMilliseconds = (epochTime() - startTimeSeconds) * 1000
+
+    let delay = ((FPS_MS - deltaTimeMilliseconds)*1000).toInt() # In microseconds, so * 1000
+    if delay > 0:
+        if usleep(delay) != 0:
+            echo "errno"
+            echo errno
     else:
-        echo "Slept"
-    # socket: Socket; address: string; port: Port; data: pointer; size: int;
-    # var result = socket.sendTo("127.0.0.1", Port(8054), "\x00\x00\x00\x00\xf6\x28\xbc\x3f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x3f\x33\x33\x33\xbe\x1f\x85\x6b\x3f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x3f\x00\x00\xd1\x22\xab\x3f\x1f\x85\x6b\x3f\x7b\x14\x2e\xbe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x3f\x00\x00")
-    # var result = socket.sendTo("127.0.0.1", Port(8053), buffer, offset)
+        echo ">>>>>EXCEEDED TIME BUDGET>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",deltaTimeMilliseconds
 
-    # echo result
-    # if usleep(1000*1000) != 0: # 1000ms
-    #     echo "errno"
-    #     echo errno
-    # else:
-    #     echo "Slept"
-
-
-
-# Test
-
-# var socket = newSocket()
-# socket.bindAddr(Port(1234))
-# socket.listen()
-
-# var client = newSocket()
-# var address = ""
-# while true:
-#   socket.acceptAddr(client, address)
-#   echo("Client connected from: ", address)
+    timer += 1
