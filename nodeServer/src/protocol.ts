@@ -13,7 +13,8 @@ export const enum MESSAGE_TYPE {
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
   SimulationTime = 0X06,
-  ControllerAttachment = 0X07
+  ControllerAttachment = 0X07,
+  MultiMessage = 0X08
 }
 
 export const enum GIZMO_VISUALS_FLAGS {
@@ -174,6 +175,13 @@ export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : nu
   offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeInt8(controllerAttachments[0], offset, true);
   offset = buf.writeInt8(controllerAttachments[1], offset, true);
+  return offset;
+}
+
+export function fillBufferWithMultiMessageMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, messageCount : number) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  offset = buf.writeUInt16LE(messageCount, offset, true);
   return offset;
 }
 

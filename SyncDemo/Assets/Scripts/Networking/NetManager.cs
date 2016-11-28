@@ -6,6 +6,25 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 
+public class FixedSizeBuffer<T> {
+    public readonly int Capacity;
+    public int Count;
+    public readonly T[] InternalBuffer;
+    public FixedSizeBuffer (int capacity) {
+        Capacity = capacity;
+        InternalBuffer = new T[capacity];
+        Count = 0;
+    }
+
+    public void Add (T item) {
+        if (Count < Capacity-1) {
+            InternalBuffer[Count] = item;
+            Count++;
+        }
+        // Interlocked.Increment(ref Count);
+    }
+}
+
 public class NetManager : MonoBehaviour {
 
     public static NetManager G = null; 
@@ -23,7 +42,8 @@ public class NetManager : MonoBehaviour {
     IPEndPoint _clientIPEP;
     EndPoint _clientEP;
 
-    const int MAX_MESSAGE_LENGTH = 1024;
+    // const int MAX_MESSAGE_LENGTH = 1024;
+    const int MAX_MESSAGE_LENGTH = 1200;
     byte[] _sendBuffer = new byte[MAX_MESSAGE_LENGTH];
     byte[] _receiveBuffer = new byte[MAX_MESSAGE_LENGTH];
     MemoryStream _sendBufferStream;
@@ -32,25 +52,6 @@ public class NetManager : MonoBehaviour {
     const int MAX_MESSAGE_COUNT = 2048*2;
     FixedSizeBuffer<NetMessage> _writeMessageBuffer = new FixedSizeBuffer<NetMessage>(MAX_MESSAGE_COUNT);
     FixedSizeBuffer<NetMessage> _readMessageBuffer = new FixedSizeBuffer<NetMessage>(MAX_MESSAGE_COUNT);
-
-    class FixedSizeBuffer<T> {
-        public readonly int Capacity;
-        public int Count;
-        public readonly T[] InternalBuffer;
-        public FixedSizeBuffer (int capacity) {
-            Capacity = capacity;
-            InternalBuffer = new T[capacity];
-            Count = 0;
-        }
-
-        public void Add (T item) {
-            if (Count < MAX_MESSAGE_COUNT-1) {
-                InternalBuffer[Count] = item;
-                Count++;
-            }
-            // Interlocked.Increment(ref Count);
-        }
-    }
 
     void Start () {
         if (G == null) {
@@ -113,7 +114,9 @@ public class NetManager : MonoBehaviour {
                 Debug.Log(e);
             }
 
-            if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
+            if (DecodeMultiMessage(_receiveBuffer, dataLength, _writeMessageBuffer)) {
+                // Already added
+            } else if (NetMessage.DecodeMessage(_receiveBuffer, dataLength, out message)) {
                 // if (message.SequenceNumber > mostRecentNum) {
                     _writeMessageBuffer.Add(message);
                     // mostRecentNum = message.SequenceNumber;
@@ -127,6 +130,28 @@ public class NetManager : MonoBehaviour {
             }
         }
         Debug.Log("Stopping Read Thread");
+    }
+
+    bool DecodeMultiMessage (byte[] buffer, int messageLength, FixedSizeBuffer<NetMessage> messageBuffer) {
+        if (messageLength > 0) {
+            int offset = 0;
+            var messageType = NetMessage.MessageTypeFromBuff(buffer, ref offset);
+            if (messageType == MessageType.MultiMessage) {
+                int embeddedMessageCount = NetMessage.UInt16FromBuff(buffer, ref offset);
+                while (embeddedMessageCount > 0) {
+                    NetMessage message;
+                    if (NetMessage.DecodeMessageUnchecked(buffer, ref offset, out message)) {
+                        messageBuffer.Add(message);
+                        embeddedMessageCount--;
+                    } else {
+                        Debug.LogError("Fatal decoding error in DecodeMultiMessage");
+                        return false;
+                    }
+                } 
+                return true;
+            }
+        }
+        return false;
     }
 
     void SendStringMessage (string message) {

@@ -51,6 +51,7 @@ const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
 const TIME_IDENT = {cs: 'Time', js: 'time'}
 const CONTROLLER_ATTACHMENT_IDENT = {cs: 'ControllerAttachments', js: 'controllerAttachments'}
 const GIZMO_VISUALS_IDENT = {cs: 'GizmoVisuals', js: 'gizmoVisuals'}
+const MESSAGE_COUNT_IDENT = {cs: 'MessageCount', js: 'messageCount'}
 
 const CONTROLLER_ATTACHMENT_TYPES = [
   {cs: 'None', js: 'NONE'}
@@ -169,6 +170,13 @@ const MESSAGES : IMessage[] = [
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
             , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: CONTROLLER_ATTACHMENT_IDENT, customType: 'ControllerAttachmentTypes'}
+            ]
+  }
+, { name: 'MultiMessage'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            , {ident: MESSAGE_COUNT_IDENT, customType: 'UInt16'}
+            // NOTE(JULIAN): Left blank for nested messages
             ]
   }
 ];

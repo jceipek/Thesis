@@ -15,6 +15,7 @@ var myStream : StringStream = newStringStream()
 type
     MessageKind = enum
         PosRotScaleVisibleTint = 0x03
+        MultiMessage = 0X08
     ModelType = enum
         MT_Cube = 0X11
     # NetMessage = object
@@ -50,21 +51,16 @@ proc addEntity (s: Stream, entity: Entity) : int =
     s.write(gizmoFlags)
     return s.getPosition()
 
-# var testEntity : Entity =
-#     Entity(id: 0,
-#            modelType: ModelType.MT_Cube,
-#            pos: (0'f32,0'f32,0'f32),
-#            rot: (0'f32,0'f32,0'f32,1'f32),
-#            scale: (1'f32,1'f32,1'f32),
-#            visible: true,
-#            tint: (0'u8,255'u8,0'u8,255'u8))
 
-const MAX_MSG_SIZE = 55
+
+const ENTITY_MSG_SIZE = 55
+const MAX_MSG_SIZE = 1200
 var buffer = alloc(MAX_MSG_SIZE)
 
 
 var entities = newSeqofCap[Entity](1000)
-for i in 0..200:
+# for i in 0..200:
+for i in 0..800:
     var num : uint16 = cast[uint16](i.toU16())
     var posX : float32 = i.toFloat() 
     entities.add(Entity(id: num,
@@ -98,8 +94,8 @@ const FPS : float = 1/90
 const FPS_MS : float = FPS * 1000
 
 const DEST_PORT = Port(8053)
-const DEST_ADDR = "192.168.1.255"
-# const DEST_ADDR = "127.0.0.1"
+# const DEST_ADDR = "192.168.1.255"
+const DEST_ADDR = "127.0.0.1"
 
 while true:
     let startTimeSeconds = epochTime()
@@ -109,14 +105,34 @@ while true:
 
     totalTimeForSending = 0
     totalTimeForCopying = 0
-    for ent in entities.mitems:
-        var result = socket.sendEntity(DEST_ADDR, DEST_PORT, myStream, buffer, ent)
-        if result == -1:
-            var e = getSocketError(socket)
-            echo "socket error:"
-            echo e
+
+    let maxStorable : int = MAX_MSG_SIZE div ENTITY_MSG_SIZE
+    let entityCount = entities.high() + 1
+    for i, ent in entities:
+        if i mod maxStorable == 0:
+            myStream.setPosition(0)
+            myStream.write(ord(MessageKind.MultiMessage).toU8())
+            myStream.write(min(entityCount - i, maxStorable).toU16())
+            # echo "COUNT ", min(entityCount - i, maxStorable).toU16()
+        # echo "ADD ",ent.id
+        discard myStream.addEntity(ent)
+
+        if (i + 1 == entityCount) or ((i+1) mod maxStorable == 0):
+            let size = myStream.getPosition()
+            myStream.setPosition(0)
+            discard myStream.readData(buffer, size)
+            discard socket.sendTo(DEST_ADDR, DEST_PORT, buffer, size)
+            # echo "SEND"
+
+
+    # for ent in entities.mitems:
+    #     var result = socket.sendEntity(DEST_ADDR, DEST_PORT, myStream, buffer, ent)
+    #     if result == -1:
+    #         var e = getSocketError(socket)
+    #         echo "socket error:"
+    #         echo e
     
-    echo totalTimeForSending*1000, '\t', totalTimeForCopying*1000
+    # echo totalTimeForSending*1000, '\t', totalTimeForCopying*1000
 
     GC_step(2000, true) # 2ms
 
