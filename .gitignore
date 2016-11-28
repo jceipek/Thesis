@@ -34,9 +34,12 @@ ExportedObj/
 ._*
 .Spotlight-V100
 .Trashes
-Icon
+Icon
+
 ehthumbs.db
 Thumbs.db
 
 *.sublime-workspace
 *.sublime-project
+
+nimcache
