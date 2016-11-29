@@ -34,6 +34,7 @@ const TYPE_INFO = {
 , 'Color': {js: 'IColor', cs: 'Color32', len: 4}
 , 'Bool': {js: 'boolean', cs: 'bool', len: 1}
 , 'GizmoVisuals': {js: 'GIZMO_VISUALS_FLAGS', cs: 'GizmoVisualsFlags', len: 1}
+, '[Message]': {js: 'TODO', cs: 'TODO', len: null}
 }
 
 const MESSAGE_TYPE_IDENT = {cs: 'MessageType', js: 'messageType'}
@@ -51,6 +52,7 @@ const VISIBLE_IDENT = {cs: 'Visible', js: 'visible'}
 const TIME_IDENT = {cs: 'Time', js: 'time'}
 const CONTROLLER_ATTACHMENT_IDENT = {cs: 'ControllerAttachments', js: 'controllerAttachments'}
 const GIZMO_VISUALS_IDENT = {cs: 'GizmoVisuals', js: 'gizmoVisuals'}
+const MESSAGE_LIST_IDENT = {cs: '[Message]', js: 'messages'}
 
 const CONTROLLER_ATTACHMENT_TYPES = [
   {cs: 'None', js: 'NONE'}
@@ -104,14 +106,12 @@ const GIZMO_VISUALS_FLAG_TYPES = [
 const MESSAGES : IMessage[] = [
   { name: 'Position'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             ]
   }
 , { name: 'PositionRotation'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
@@ -119,7 +119,6 @@ const MESSAGES : IMessage[] = [
   }
 , { name: 'PositionRotationScaleModel'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: MODEL_TYPE_IDENT, customType: 'ModelType'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
@@ -129,7 +128,6 @@ const MESSAGES : IMessage[] = [
   }
 , { name: 'PositionRotationScaleVisibleTintModel'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: MODEL_TYPE_IDENT, customType: 'ModelType'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
@@ -142,7 +140,6 @@ const MESSAGES : IMessage[] = [
   }
 , { name: 'PositionRotationVelocityColor'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: ROTATION_IDENT, customType: 'Quaternion'}
@@ -152,7 +149,6 @@ const MESSAGES : IMessage[] = [
   }
 , { name: 'Segment'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: OBJECTID_IDENT, customType: 'UInt16'}
             , {ident: POSITION_IDENT, customType: 'Vector3'}
             , {ident: DESTINATION_IDENT, customType: 'Vector3'}
@@ -161,14 +157,18 @@ const MESSAGES : IMessage[] = [
   }
 , { name: 'SimulationTime'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: TIME_IDENT, customType: 'Float'}
             ]
   }
 , { name: 'ControllerAttachment'
   , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
-            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
             , {ident: CONTROLLER_ATTACHMENT_IDENT, customType: 'ControllerAttachmentTypes'}
+            ]
+  }
+, { name: 'MultiMessage'
+  , fields: [ {ident: MESSAGE_TYPE_IDENT, customType: 'MessageType'}
+            , {ident: SEQUENCE_NUMBER_IDENT, customType: 'Int32'}
+            // Rest of the message will be other messages!
             ]
   }
 ];
@@ -236,6 +236,8 @@ function numHex(s) {
 function jsCreateProtocolFromMessages (messages: IMessage[]) {
   let output = `import { vec3 as Vec3, quat as Quat } from "gl-matrix"\n\n`
 
+  output += `export const MAX_MESSAGE_LENGTH = 1200;\n\n`;
+
   output += `type IVector3 = Vec3;\n`;
   output += `type IQuaternion = Quat;\n`;
   output += `type IColor = Uint8Array;\n\n`;
@@ -244,6 +246,9 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += "  Unknown = -1,\n";
   output += messages.map((message, index) => `  ${message.name} = ${numHex(index)}`).join(',\n');
   output += "\n}\n\n";
+  output += "export const MESSAGE_TYPE_TO_LENGTH = {};\n"
+  output += messages.map((message, index) => `MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.${message.name}] = ${message.fields.reduce((acc, field) => acc+TYPE_INFO[field.customType].len, 0)};`).join('\n');
+  output += "\n\n";
 
   output += "export const enum GIZMO_VISUALS_FLAGS {\n";
   output += GIZMO_VISUALS_FLAG_TYPES.map((flagName, index) => `  ${flagName} = ${numHex((index == 0? 0 : 1<<(index-1)))}`).join(',\n');
@@ -312,9 +317,14 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   output += "\n}\n\n";
 
   function getIdentifiers (message : IMessage) {
-    return message.fields.map((field) => [field.ident.cs, TYPE_INFO[field.customType].cs]);
+    return message.fields.map((field) => TYPE_INFO[field.customType] !== undefined? [field.ident.cs, TYPE_INFO[field.customType].cs] : null);
   }
-  let fieldIdentifiers = new Map(messages.reduce((acc, message) => { acc.push(...getIdentifiers(message)); return acc; }, []));
+  let fieldIdentifiers = new Map(messages.reduce((acc, message) => {
+    if (message !== null) {
+      acc.push(...getIdentifiers(message));
+    }
+    return acc;
+  }, []));
   output += "public struct NetMessage {\n";
   for (let [ident, type] of fieldIdentifiers) {
     output += `\tpublic ${type} ${ident};\n`

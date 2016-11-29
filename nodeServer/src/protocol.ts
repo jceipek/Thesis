@@ -1,5 +1,7 @@
 import { vec3 as Vec3, quat as Quat } from "gl-matrix"
 
+export const MAX_MESSAGE_LENGTH = 1200;
+
 type IVector3 = Vec3;
 type IQuaternion = Quat;
 type IColor = Uint8Array;
@@ -13,8 +15,20 @@ export const enum MESSAGE_TYPE {
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
   SimulationTime = 0X06,
-  ControllerAttachment = 0X07
+  ControllerAttachment = 0X07,
+  MultiMessage = 0X08
 }
+
+export const MESSAGE_TYPE_TO_LENGTH = {};
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.Position] = 15;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotation] = 31;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleModel] = 45;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel] = 51;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationVelocityColor] = 47;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.Segment] = 31;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.SimulationTime] = 5;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.ControllerAttachment] = 3;
+MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.MultiMessage] = 5;
 
 export const enum GIZMO_VISUALS_FLAGS {
   None = 0X00,
@@ -63,9 +77,8 @@ ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;
 ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;
 ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;
 
-export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3) {
+export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, pos : IVector3) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
   offset = buf.writeFloatLE(pos[1], offset, true);
@@ -73,9 +86,8 @@ export function fillBufferWithPositionMsg (buf : Buffer, offset : number, messag
   return offset;
 }
 
-export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3, rot : IQuaternion) {
+export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, pos : IVector3, rot : IQuaternion) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
   offset = buf.writeFloatLE(pos[1], offset, true);
@@ -87,9 +99,8 @@ export function fillBufferWithPositionRotationMsg (buf : Buffer, offset : number
   return offset;
 }
 
-export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3) {
+export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeUInt16LE(modelType, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
@@ -105,9 +116,8 @@ export function fillBufferWithPositionRotationScaleModelMsg (buf : Buffer, offse
   return offset;
 }
 
-export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor, gizmoVisuals : GIZMO_VISUALS_FLAGS) {
+export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, modelType : MODEL_TYPE, pos : IVector3, rot : IQuaternion, scale : IVector3, visible : boolean, tint : IColor, gizmoVisuals : GIZMO_VISUALS_FLAGS) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeUInt16LE(modelType, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
@@ -129,9 +139,8 @@ export function fillBufferWithPositionRotationScaleVisibleTintModelMsg (buf : Bu
   return offset;
 }
 
-export function fillBufferWithPositionRotationVelocityColorMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3, rot : IQuaternion, vel : IVector3, color : IColor) {
+export function fillBufferWithPositionRotationVelocityColorMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, pos : IVector3, rot : IQuaternion, vel : IVector3, color : IColor) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
   offset = buf.writeFloatLE(pos[1], offset, true);
@@ -150,9 +159,8 @@ export function fillBufferWithPositionRotationVelocityColorMsg (buf : Buffer, of
   return offset;
 }
 
-export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, objectId : number, pos : IVector3, dest : IVector3, color : IColor) {
+export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, objectId : number, pos : IVector3, dest : IVector3, color : IColor) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeUInt16LE(objectId, offset, true);
   offset = buf.writeFloatLE(pos[0], offset, true);
   offset = buf.writeFloatLE(pos[1], offset, true);
@@ -167,17 +175,22 @@ export function fillBufferWithSegmentMsg (buf : Buffer, offset : number, message
   return offset;
 }
 
-export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, time : number) {
+export function fillBufferWithSimulationTimeMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, time : number) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeFloatLE(time, offset, true);
   return offset;
 }
 
-export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number, controllerAttachments : Uint8Array) {
+export function fillBufferWithControllerAttachmentMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, controllerAttachments : Uint8Array) {
   offset = buf.writeInt8(messageType, offset, true);
-  offset = buf.writeInt32LE(sequenceNumber, offset, true);
   offset = buf.writeInt8(controllerAttachments[0], offset, true);
   offset = buf.writeInt8(controllerAttachments[1], offset, true);
   return offset;
 }
+
+export function fillBufferWithMultiMessageMsg (buf : Buffer, offset : number, messageType : MESSAGE_TYPE, sequenceNumber : number) {
+  offset = buf.writeInt8(messageType, offset, true);
+  offset = buf.writeInt32LE(sequenceNumber, offset, true);
+  return offset;
+}
+

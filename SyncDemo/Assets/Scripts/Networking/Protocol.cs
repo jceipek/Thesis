@@ -12,7 +12,8 @@ public enum MessageType {
   PositionRotationVelocityColor = 0X04,
   Segment = 0X05,
   SimulationTime = 0X06,
-  ControllerAttachment = 0X07
+  ControllerAttachment = 0X07,
+  MultiMessage = 0X08
 }
 
 [FlagsAttribute]
@@ -68,7 +69,6 @@ public enum ModelType {
 
 public struct NetMessage {
 	public MessageType MessageType;
-	public int SequenceNumber;
 	public ushort ObjectId;
 	public Vector3 Position;
 	public Quaternion Rotation;
@@ -82,6 +82,7 @@ public struct NetMessage {
 	public Vector3 Destination;
 	public float Time;
 	public ControllerAttachmentTypes ControllerAttachments;
+	public int SequenceNumber;
 	static MessageType MessageTypeFromBuff (byte[] data, ref int offset) {
   		MessageType res = (MessageType)data[offset];
   		offset += 1;
@@ -160,14 +161,12 @@ public struct NetMessage {
 
 	private static NetMessage DecodePosition (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.Position,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset) };
 	}
 
 	private static NetMessage DecodePositionRotation (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotation,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Rotation = QuaternionFromBuff(data, ref offset) };
@@ -175,7 +174,6 @@ public struct NetMessage {
 
 	private static NetMessage DecodePositionRotationScaleModel (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotationScaleModel,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        ModelType = ModelTypeFromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
@@ -185,7 +183,6 @@ public struct NetMessage {
 
 	private static NetMessage DecodePositionRotationScaleVisibleTintModel (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotationScaleVisibleTintModel,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        ModelType = ModelTypeFromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
@@ -198,7 +195,6 @@ public struct NetMessage {
 
 	private static NetMessage DecodePositionRotationVelocityColor (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.PositionRotationVelocityColor,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Rotation = QuaternionFromBuff(data, ref offset),
@@ -208,7 +204,6 @@ public struct NetMessage {
 
 	private static NetMessage DecodeSegment (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.Segment,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ObjectId = UInt16FromBuff(data, ref offset),
 		                        Position = Vector3FromBuff(data, ref offset),
 		                        Destination = Vector3FromBuff(data, ref offset),
@@ -217,14 +212,71 @@ public struct NetMessage {
 
 	private static NetMessage DecodeSimulationTime (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.SimulationTime,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        Time = FloatFromBuff(data, ref offset) };
 	}
 
 	private static NetMessage DecodeControllerAttachment (byte[] data, ref int offset) {
 		return new NetMessage { MessageType = MessageType.ControllerAttachment,
-		                        SequenceNumber = Int32FromBuff(data, ref offset),
 		                        ControllerAttachments = ControllerAttachmentTypesFromBuff(data, ref offset) };
+	}
+
+	// private static NetMessage DecodeMultiMessage (byte[] data, ref int offset) {
+	// 	return new NetMessage { MessageType = MessageType.MultiMessage,
+	// 	                        SequenceNumber = Int32FromBuff(data, ref offset) };
+	// }
+
+	public static bool DecodeMultiMessage (FixedSizeBuffer<NetMessage> messageBuffer, byte[] dataBuffer, int dataLength) {
+		if (dataLength > 0) {
+			int offset = 0;
+			var messageType = MessageTypeFromBuff(dataBuffer, ref offset);
+			var sequenceNumber = Int32FromBuff(dataBuffer, ref offset);
+			int decodedCount = 0; 
+			while (offset < dataLength) {
+				NetMessage newMessage;
+				if (DecodeMessageUnchecked(dataBuffer, out newMessage, ref offset)) {
+					messageBuffer.Add(newMessage);
+					decodedCount++;
+				} else {
+					Debug.LogError("MultiMessage Decoding Problem");
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private static bool DecodeMessageUnchecked (byte[] buffer, out NetMessage decodedMessage, ref int offset) {
+		var messageType = MessageTypeFromBuff(buffer, ref offset);
+		switch (messageType) {
+			case MessageType.Position:
+				decodedMessage = DecodePosition(buffer, ref offset);
+				return true;
+			case MessageType.PositionRotation:
+				decodedMessage = DecodePositionRotation(buffer, ref offset);
+				return true;
+			case MessageType.PositionRotationScaleModel:
+				decodedMessage = DecodePositionRotationScaleModel(buffer, ref offset);
+				return true;
+			case MessageType.PositionRotationScaleVisibleTintModel:
+				decodedMessage = DecodePositionRotationScaleVisibleTintModel(buffer, ref offset);
+				return true;
+			case MessageType.PositionRotationVelocityColor:
+				decodedMessage = DecodePositionRotationVelocityColor(buffer, ref offset);
+				return true;
+			case MessageType.Segment:
+				decodedMessage = DecodeSegment(buffer, ref offset);
+				return true;
+			case MessageType.SimulationTime:
+				decodedMessage = DecodeSimulationTime(buffer, ref offset);
+				return true;
+			case MessageType.ControllerAttachment:
+				decodedMessage = DecodeControllerAttachment(buffer, ref offset);
+				return true;
+			default:
+				break;
+		}
+		decodedMessage = new NetMessage { MessageType = MessageType.Unknown };
+		return false;
 	}
 
 	public static bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {
@@ -233,53 +285,59 @@ public struct NetMessage {
 			var messageType = MessageTypeFromBuff(buffer, ref offset);
 			switch (messageType) {
   				case MessageType.Position:
-  					if (messageLength == 19) {
+  					if (messageLength == 15) {
   						decodedMessage = DecodePosition(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.PositionRotation:
-  					if (messageLength == 35) {
+  					if (messageLength == 31) {
   						decodedMessage = DecodePositionRotation(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.PositionRotationScaleModel:
-  					if (messageLength == 49) {
+  					if (messageLength == 45) {
   						decodedMessage = DecodePositionRotationScaleModel(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.PositionRotationScaleVisibleTintModel:
-  					if (messageLength == 55) {
+  					if (messageLength == 51) {
   						decodedMessage = DecodePositionRotationScaleVisibleTintModel(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.PositionRotationVelocityColor:
-  					if (messageLength == 51) {
+  					if (messageLength == 47) {
   						decodedMessage = DecodePositionRotationVelocityColor(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.Segment:
-  					if (messageLength == 35) {
+  					if (messageLength == 31) {
   						decodedMessage = DecodeSegment(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.SimulationTime:
-  					if (messageLength == 9) {
+  					if (messageLength == 5) {
   						decodedMessage = DecodeSimulationTime(buffer, ref offset);
   						return true;
   					}
   					break;
   				case MessageType.ControllerAttachment:
-  					if (messageLength == 7) {
+  					if (messageLength == 3) {
   						decodedMessage = DecodeControllerAttachment(buffer, ref offset);
   						return true;
   					}
   					break;
+  				// case MessageType.MultiMessage:
+  				// 	if (messageLength == 5) {
+  				// 		decodedMessage = DecodeMultiMessage(buffer, ref offset);
+  				// 		return true;
+  				// 	}
+  				// 	break;
 				default:
 					break;
 			}

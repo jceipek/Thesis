@@ -1,4 +1,4 @@
-import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS, ATTACHMENT_TYPE_TO_MODEL } from './protocol'
+import { MAX_MESSAGE_LENGTH, MESSAGE_TYPE, MESSAGE_TYPE_TO_LENGTH, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS, ATTACHMENT_TYPE_TO_MODEL } from './protocol'
 import * as BPromise from 'bluebird'
 import * as Protocol from './protocol'
 import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
@@ -80,38 +80,35 @@ const sendBroadcastPromise = BPromise.promisify(sendBroadcast);
 const sendTargetPromise = BPromise.promisify(sendTarget);
 const sendPromise = BPromise.promisify(doSend);
 
-function asyncSendAvatarInfo (deferredPromises : BPromise<number>[], offset: number, destination: string, inputData : IInputData) : number {
-  let dataCount = 0;
-  let newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, offset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-
+function packSendAvatarInfo (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, destination: string, inputData : IInputData) {
   let [host, portString] = destination.split(':');
   let port = parseInt(portString, 10);
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
+
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, port, host);
+  Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, inputData.headset.id, MODEL_TYPE.HEADSET, inputData.headset.pos, inputData.headset.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 
   let controller0 = inputData.controllers[0];
   let controller1 = inputData.controllers[1];
   
-  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, port, host);
+  Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, controller0.id, MODEL_TYPE.CONTROLLER_BASE, controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 
-  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, port, host);
+  Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, controller1.id, MODEL_TYPE.CONTROLLER_BASE, controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 
-  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, port, host);
+  Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, controller0.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller0.attachment], controller0.pos, controller0.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 
-  newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, newOffset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, _currSeqId, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host)); offset = newOffset;
-
-  return newOffset;
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, port, host);
+  Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, controller1.attachmentId, ATTACHMENT_TYPE_TO_MODEL[controller1.attachment], controller1.pos, controller1.rot, UNIT_VECTOR3, true, BASE_COLOR, GIZMO_VISUALS_FLAGS.None);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 }
 
-function asyncSendEntityData (deferredPromises : BPromise<number>[], offset: number, offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) : number {  
+function packEntityData (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, offsetpos : IVector3, offsetrot : IQuaternion, offsetscale : IVector3, entity: IEntity) {  
   const rot = Quat.mul(/*out*/Quat.create()
                       , offsetrot, entity.rot);
   let temp = Vec3.create();
@@ -120,9 +117,10 @@ function asyncSendEntityData (deferredPromises : BPromise<number>[], offset: num
                                                      , entity.pos, offsetrot));
   const scale = Vec3.mul(/*out*/Vec3.create()
                         , entity.scale, offsetscale);
+
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel, PORT, HOST);
   let newOffset = Protocol.fillBufferWithPositionRotationScaleVisibleTintModelMsg(_sendBuffer
-                                                                                 , offset, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
-                                                                                 , _currSeqId
+                                                                                 , descriptor.start + descriptor.length, MESSAGE_TYPE.PositionRotationScaleVisibleTintModel
                                                                                  , entity.id
                                                                                  , entity.type
                                                                                  , pos
@@ -131,55 +129,73 @@ function asyncSendEntityData (deferredPromises : BPromise<number>[], offset: num
                                                                                  , entity.visible && !entity.deleted 
                                                                                  , entity.tint
                                                                                  , entity.gizmoVisuals);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.PositionRotationScaleVisibleTintModel];
 
-  const messageLength = newOffset - offset;
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, messageLength, PORT, HOST));
   for (let child of entity.children.entities) {
-      newOffset = asyncSendEntityData(deferredPromises, newOffset, pos, rot, scale, child);
+      packEntityData(deferredPromises, descriptor, pos, rot, scale, child);
   }
-  return newOffset;
 }
 
-function asyncSendEntity (deferredPromises : BPromise<number>[], offset: number, entity : IEntity) : number {
-  return asyncSendEntityData(deferredPromises, offset, NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity);
+function packEntity (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, entity : IEntity) {
+  return packEntityData(deferredPromises, descriptor, NULL_VECTOR3, IDENT_QUAT, UNIT_VECTOR3, entity);
 }
 
-function asyncSendEntityList (deferredPromises : BPromise<number>[], offset: number, entityList : IEntityList) : number {
+function packEntityList (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, entityList : IEntityList) {
   // TODO(JULIAN): Implement scale for entity lists and use it here
-  let dataCount = 0;
   for (let entity of entityList.entities) {
-      offset = asyncSendEntityData(deferredPromises, offset, entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity);
+      packEntityData(deferredPromises, descriptor, entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity);
   }
-  return offset;
 }
 
-function asyncSendSegment (deferredPromises : BPromise<number>[], offset: number, segment : ISegment) : number {
-  const newOffset = Protocol.fillBufferWithSegmentMsg(_sendBuffer, offset, MESSAGE_TYPE.Segment, _currSeqId, segment.id, segment.start, segment.end, segment.color);
-  _currSeqId++;
-  const messageLength = newOffset - offset;
-  sendPromise(_sendBuffer, offset, messageLength, PORT, HOST);
-  return newOffset;
+function packSendSegment (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, segment : ISegment) {
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.Segment, PORT, HOST);
+  Protocol.fillBufferWithSegmentMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.Segment, segment.id, segment.start, segment.end, segment.color);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.Segment];
 }
 
 const _controllerAttachmentsBuffer = new Uint8Array([CONTROLLER_ATTACHMENT_TYPE.NONE, CONTROLLER_ATTACHMENT_TYPE.NONE]); 
-function asyncSendAttachment (deferredPromises : BPromise<number>[], offset: number, destination: string, controllers : IController[]) : number {
+function asyncSendAttachment (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, destination: string, controllers : IController[]) {
   const [host, portString] = destination.split(':');
   const port = parseInt(portString, 10);
   _controllerAttachmentsBuffer[0] = controllers[0].attachment;
   _controllerAttachmentsBuffer[1] = controllers[1].attachment;
-  const newOffset = Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, offset, MESSAGE_TYPE.ControllerAttachment, _currSeqId, _controllerAttachmentsBuffer); 
-  _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, newOffset - offset, port, host));
-  return newOffset;
+
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.ControllerAttachment, port, host);
+  Protocol.fillBufferWithControllerAttachmentMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.ControllerAttachment, _controllerAttachmentsBuffer);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.ControllerAttachment];
 }
 
-function sendSimulationTime (deferredPromises : BPromise<number>[], offset: number, time : number) : number {
-  const newOffset = Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, offset, MESSAGE_TYPE.SimulationTime, _currSeqId, time);
-  const messageLength = newOffset - offset;
+function packSendSimulationTime (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, time : number) {
+  fillMultiMessageBody(deferredPromises, descriptor, MESSAGE_TYPE.SimulationTime, PORT, HOST);
+  Protocol.fillBufferWithSimulationTimeMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.SimulationTime, time);
+  descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.SimulationTime];
+}
+
+function fillMultiMessageBody (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, nextMessageType: MESSAGE_TYPE, port: number, host: string) {
+  if (descriptor.length + MESSAGE_TYPE_TO_LENGTH[nextMessageType] > MAX_MESSAGE_LENGTH ||
+     (descriptor.port !== port || descriptor.host !== host)) {
+    prepareMultiMessagePromise(deferredPromises, descriptor);
+  }
+  if (descriptor.length === 0) {
+    Protocol.fillBufferWithMultiMessageMsg(_sendBuffer, descriptor.start + descriptor.length, MESSAGE_TYPE.MultiMessage, _currSeqId);
+    descriptor.length += MESSAGE_TYPE_TO_LENGTH[MESSAGE_TYPE.MultiMessage];
+  }
+  descriptor.port = port;
+  descriptor.host = host;
+}
+
+function prepareMultiMessagePromise (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor) {
+  deferredPromises.push(sendPromise(_sendBuffer, descriptor.start, descriptor.length, descriptor.port, descriptor.host));
   _currSeqId++;
-  deferredPromises.push(sendPromise(_sendBuffer, offset, messageLength, PORT, HOST));
-  return newOffset;
+  descriptor.start += descriptor.length; 
+  descriptor.length = 0;
+}
+
+interface IMultiMesageDescriptor {
+  start: number;
+  length: number;
+  port: number;
+  host: string;
 }
 
 let _finishedSending : boolean = true;
@@ -188,21 +204,22 @@ async function sendState (state : IState, transientState : ITransientState) {
   let DEBUG_start_sending = process.hrtime();
   let startFrame = PERFORMANCE_TRACKER.currFrame;
 
-  let offset = 0;
-  let promise = null;
   let promises = [];
+  let multiMessageDescriptor : IMultiMesageDescriptor = { start: 0, length: 0, port: PORT, host: HOST };
 
-  offset = sendSimulationTime(promises, offset, state.simulationTime);
+  packSendSimulationTime(promises, multiMessageDescriptor, state.simulationTime);
+ 
   for (let model of state.models.entities) {
-    offset = asyncSendEntity(promises, offset, model);
+    packEntity(promises, multiMessageDescriptor, model);
   }
+
   for (let entity of state.entities.entities) {
-    offset = asyncSendEntity(promises, offset, entity);
+    packEntity(promises, multiMessageDescriptor, entity);
   }
 
   // XXX(JULIAN): Optimize this so we don't send everything all the time!
   for (let rule of state.oven.rules) {
-    offset = asyncSendEntityList(promises, offset, rule.entities);
+    packEntityList(promises, multiMessageDescriptor, rule.entities);
   }
 
   let avatarStuffToSend = [];
@@ -218,17 +235,21 @@ async function sendState (state : IState, transientState : ITransientState) {
     }
   }
 
+  let offset = multiMessageDescriptor.start + multiMessageDescriptor.length; 
   for (let destAndInputData of avatarStuffToSend) {
-    offset = asyncSendAvatarInfo(promises, offset, destAndInputData.destination, destAndInputData.data);
+    packSendAvatarInfo(promises, multiMessageDescriptor, destAndInputData.destination, destAndInputData.data);
   }
 
-
   for (let destAndControllers of controllerAttachmentDataToSend) {
-    offset = asyncSendAttachment(promises, offset, destAndControllers.destination, destAndControllers.data);
+    asyncSendAttachment(promises, multiMessageDescriptor, destAndControllers.destination, destAndControllers.data);
   }
 
   for (let segment of state.segments) {
-    offset = asyncSendSegment(promises, offset, segment);
+    packSendSegment(promises, multiMessageDescriptor, segment);
+  }
+  
+  if (multiMessageDescriptor.length > 0) {
+    prepareMultiMessagePromise(promises, multiMessageDescriptor);
   }
 
   PERFORMANCE_TRACKER[startFrame].preTransferTime = nanosecondsFromElapsedDelta(process.hrtime(DEBUG_start_sending));

@@ -70,7 +70,7 @@ const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.517
 
 export const STATE : IState = getInitialState();
 
-function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
+export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
     type: type
   , id: _latestEntityId++
