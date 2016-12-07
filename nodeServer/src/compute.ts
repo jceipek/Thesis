@@ -826,9 +826,9 @@ function getInitialState () : IState {
                ]
     };
 
-    // for (let i = 0; i < 500; i++) {
-    //   DEFAULT_STATE.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
-    // }
+    for (let i = 0; i < 300; i++) {
+      DEFAULT_STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+    }
 
     saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
