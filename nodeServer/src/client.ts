@@ -56,8 +56,8 @@ const enum SIMULATION_TYPE {
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-// const HOST = '192.168.1.255'; // Subnet broadcast
-const HOST = '127.0.0.1';
+const HOST = '192.168.1.255'; // Subnet broadcast
+// const HOST = '127.0.0.1';
 
 const NETWORK = DGRAM.createSocket('udp4');
 
@@ -1106,9 +1106,9 @@ function getInitialState () : IState {
                ]
     };
 
-    // for (let i = 0; i < 500; i++) {
-    //   DEFAULT_STATE.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
-    // }
+    for (let i = 0; i < 300; i++) {
+      DEFAULT_STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE))
+    }
 
     saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
@@ -1816,7 +1816,7 @@ function sendState () {
             } else {
               controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers})
             }
-            avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
+            // avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData})
           }
         }
 
