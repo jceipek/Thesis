@@ -231,7 +231,7 @@ async function sendState (state : IState, transientState : ITransientState) {
       } else {
         controllerAttachmentDataToSend.push({destination: remoteClient, data: inputData.controllers});
       }
-      avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData});
+      // avatarStuffToSend.push({destination: '127.0.0.1:'+PORT, data: inputData});
     }
   }
 
