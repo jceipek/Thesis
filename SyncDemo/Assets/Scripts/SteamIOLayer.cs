@@ -31,15 +31,14 @@ public class SteamIOLayer : MonoBehaviour, IControllerLayer {
     // }
 
     void OnEnable() {
-        SteamVR_Utils.Event.Listen("new_poses", OnNewPoses);
+        SteamVR_Events.NewPoses.Listen(OnNewPoses);
     }
 
     void OnDisable() {
-        SteamVR_Utils.Event.Remove("new_poses", OnNewPoses);
+        SteamVR_Events.NewPoses.Remove(OnNewPoses);
     }
 
-    private void OnNewPoses(params object[] args) {
-        var poses = (TrackedDevicePose_t[])args[0];
+    private void OnNewPoses(TrackedDevicePose_t[] poses) {
         UpdateDataForTrackedObject (_headsetTrackedObject, poses, _headsetData);
         UpdateDataForTrackedObject (_controller0Manager.TrackedObject, poses, _controller0Data);
         UpdateDataForTrackedObject (_controller1Manager.TrackedObject, poses, _controller1Data);
