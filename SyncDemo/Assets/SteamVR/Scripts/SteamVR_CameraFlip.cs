@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Flips the camera output back to normal for D3D.
 //
@@ -16,3 +18,5 @@ public class SteamVR_CameraFlip : MonoBehaviour
 	}
 }
 
+
+#endif

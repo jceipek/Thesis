@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Player interface used to query HMD transforms and VR hands
 //
@@ -404,3 +406,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

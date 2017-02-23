@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Adding this component to an object will allow the player to 
 //			initiate teleporting while that object is attached to their hand
@@ -16,3 +18,5 @@ namespace Valve.VR.InteractionSystem
 		public bool overrideHoverLock = true;
 	}
 }
+
+#endif

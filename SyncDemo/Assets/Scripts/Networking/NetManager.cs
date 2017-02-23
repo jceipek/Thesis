@@ -1,10 +1,20 @@
+#if !UNITY_EDITOR && UNITY_METRO
+#define IS_HOLOLENS
+#else
+#undef IS_HOLOLENS
+#endif
 namespace Giverspace {
 
 using UnityEngine;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
+
 using System.IO;
+
+using System.Threading;
+#if IS_HOLOLENS
+using System.Threading.Tasks;
+#endif
 
 public class FixedSizeBuffer<T> {
     public readonly int Capacity;
@@ -66,11 +76,15 @@ public class NetManager : MonoBehaviour {
             _clientEP = (EndPoint)_clientIPEP;
             _clientSock.Bind(_clientEP);
 
-
+#if IS_HOLOLENS
+            _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+            new Task(() => Reader(), _cancellationTokenSource.Token, TaskCreationOptions.LongRunning).Start();
+#else
             var t_Consumer = new Thread(new ThreadStart(Reader));
             t_Consumer.IsBackground = true;
             t_Consumer.Start();
             _running = true;
+#endif
         } else {
             return;
         }
@@ -101,7 +115,11 @@ public class NetManager : MonoBehaviour {
     void Reader () {
         // int mostRecentNum = 0;
         NetMessage message;
+#if IS_HOLOLENS
+        while (!_cancellationTokenSource.IsCancellationRequested) {
+#else
         while (_running) {
+#endif
             int dataLength = 0;
             try {
                 dataLength = _clientSock.ReceiveFrom(_receiveBuffer, 0, _receiveBuffer.Length, SocketFlags.None, ref _servEP);
@@ -178,9 +196,18 @@ public class NetManager : MonoBehaviour {
         }
     }
 
+
+#if IS_HOLOLENS
+    System.Threading.CancellationTokenSource _cancellationTokenSource;
+#else
     bool _running = true;
+#endif
     void OnDisable () {
+#if IS_HOLOLENS
+        _cancellationTokenSource.Cancel();
+#else
         _running = false;
+#endif
         Debug.Log("Disable!");
     }
 

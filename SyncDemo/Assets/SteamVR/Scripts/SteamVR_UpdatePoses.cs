@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Helper to update poses when using native OpenVR integration.
 //
@@ -34,3 +36,5 @@ public class SteamVR_UpdatePoses : MonoBehaviour
 	}
 }
 
+
+#endif

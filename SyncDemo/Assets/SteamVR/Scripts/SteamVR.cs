@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Access to SteamVR system (hmd) and compositor (distort) interfaces.
 //
@@ -351,3 +353,5 @@ public class SteamVR : System.IDisposable
 	}
 }
 
+
+#endif

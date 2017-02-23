@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Uses the see thru renderer while attached to hand
 //
@@ -150,3 +152,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

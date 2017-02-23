@@ -1,4 +1,6 @@
-﻿namespace Giverspace {
+﻿// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+namespace Giverspace {
 	using UnityEngine;
 
 	public class ControllerManager : MonoBehaviour {
@@ -16,3 +18,4 @@
 		}
 	}
 }
+#endif

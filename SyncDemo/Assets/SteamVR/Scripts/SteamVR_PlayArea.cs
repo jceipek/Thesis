@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Draws different sized room-scale play areas for targeting content
 //
@@ -277,3 +279,5 @@ public class SteamVR_PlayArea : MonoBehaviour
 	}
 }
 
+
+#endif

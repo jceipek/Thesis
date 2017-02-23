@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Plays one of many audio files with possible randomized parameters
 //
@@ -214,3 +216,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

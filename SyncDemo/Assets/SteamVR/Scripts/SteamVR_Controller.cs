@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Wrapper for working with SteamVR controller input
 //
@@ -233,3 +235,5 @@ public class SteamVR_Controller
 	}
 }
 
+
+#endif

@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Triggers haptic pulses based on distance between 2 positions
 //
@@ -40,3 +42,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

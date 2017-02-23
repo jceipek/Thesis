@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 using UnityEngine;
 using System.Collections;
 
@@ -139,3 +141,5 @@ public class SteamVR_LaserPointer : MonoBehaviour
         pointer.transform.localPosition = new Vector3(0f, 0f, dist/2f);
     }
 }
+
+#endif

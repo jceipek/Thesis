@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Can be attached to the controller to collide with the balloons
 //
@@ -91,3 +93,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Masks out pixels that cannot be seen through the connected hmd.
 //
@@ -16,3 +18,5 @@ public class SteamVR_CameraMask : MonoBehaviour
 	}
 }
 
+
+#endif

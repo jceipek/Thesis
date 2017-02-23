@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: This object won't be destroyed when a new scene is loaded
 //
@@ -19,3 +21,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

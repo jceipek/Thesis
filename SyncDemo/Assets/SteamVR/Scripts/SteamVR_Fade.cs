@@ -1,3 +1,5 @@
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
 //#define TEST_FADE_VIEW
 //======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
@@ -126,3 +128,5 @@ public class SteamVR_Fade : MonoBehaviour
 	}
 }
 
+
+#endif

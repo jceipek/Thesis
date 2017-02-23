@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Changes the pitch of this audio source based on a linear mapping
 //			and a curve
@@ -56,3 +58,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

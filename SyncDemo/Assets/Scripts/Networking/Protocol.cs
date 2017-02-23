@@ -228,8 +228,8 @@ public struct NetMessage {
 	public static bool DecodeMultiMessage (FixedSizeBuffer<NetMessage> messageBuffer, byte[] dataBuffer, int dataLength) {
 		if (dataLength > 0) {
 			int offset = 0;
-			var messageType = MessageTypeFromBuff(dataBuffer, ref offset);
-			var sequenceNumber = Int32FromBuff(dataBuffer, ref offset);
+			/*var messageType = */MessageTypeFromBuff(dataBuffer, ref offset);
+			/*var sequenceNumber = */Int32FromBuff(dataBuffer, ref offset);
 			int decodedCount = 0; 
 			while (offset < dataLength) {
 				NetMessage newMessage;

@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Applies spherical projection to output.
 //
@@ -38,3 +40,5 @@ public class SteamVR_SphericalProjection : MonoBehaviour
 	}
 }
 
+
+#endif

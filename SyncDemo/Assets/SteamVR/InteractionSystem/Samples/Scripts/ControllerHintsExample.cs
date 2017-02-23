@@ -1,3 +1,5 @@
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
 //======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Demonstrates the use of the controller hint system
@@ -113,3 +115,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

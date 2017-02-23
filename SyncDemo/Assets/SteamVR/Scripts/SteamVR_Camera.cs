@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Adds SteamVR render support to existing camera objects
 //
@@ -275,3 +277,5 @@ public class SteamVR_Camera : MonoBehaviour
 	#endregion
 }
 
+
+#endif

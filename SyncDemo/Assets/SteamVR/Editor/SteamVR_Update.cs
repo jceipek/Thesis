@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens Compatibility:
+#if UNITY_STANDALONE_WIN && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Notify developers when a new version of the plugin is available.
 //
@@ -164,3 +166,5 @@ public class SteamVR_Update : EditorWindow
 	}
 }
 
+
+#endif
