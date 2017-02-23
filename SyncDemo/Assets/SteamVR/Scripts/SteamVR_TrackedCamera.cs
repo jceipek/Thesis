@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Provides access to video feed and poses of tracked cameras.
 //
@@ -216,3 +218,5 @@ public class SteamVR_TrackedCamera
 	#endregion
 }
 
+
+#endif

@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Target that sends events when hit by an arrow
 //
@@ -79,3 +81,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+using UnityEngine;
 using System.Collections;
 
 public class SteamVR_Teleporter : MonoBehaviour
@@ -96,3 +98,5 @@ public class SteamVR_Teleporter : MonoBehaviour
 	}
 }
 
+
+#endif

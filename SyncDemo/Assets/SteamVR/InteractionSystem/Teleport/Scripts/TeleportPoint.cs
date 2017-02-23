@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Single location that the player can teleport to
 //
@@ -345,3 +347,5 @@ namespace Valve.VR.InteractionSystem
 	}
 #endif
 }
+
+#endif

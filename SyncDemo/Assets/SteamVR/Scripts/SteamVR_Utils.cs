@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Utilities for working with SteamVR
 //
@@ -595,3 +597,5 @@ public static class SteamVR_Utils
 	}
 }
 
+
+#endif

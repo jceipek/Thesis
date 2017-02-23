@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Makes the hand act as an input module for Unity's event system
 //
@@ -77,3 +79,5 @@ namespace Valve.VR.InteractionSystem
 		}
 	}
 }
+
+#endif

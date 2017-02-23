@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Keeps track of the ItemPackage this object is a part of
 //
@@ -15,3 +17,5 @@ namespace Valve.VR.InteractionSystem
 		public ItemPackage itemPackage;
 	}
 }
+
+#endif

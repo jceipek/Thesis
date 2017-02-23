@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: A package of items that can interact with the hands and be returned
 //
@@ -22,3 +24,5 @@ namespace Valve.VR.InteractionSystem
 		public GameObject fadedPreviewPrefab; // used to preview insubstantial inputObject
 	}
 }
+
+#endif

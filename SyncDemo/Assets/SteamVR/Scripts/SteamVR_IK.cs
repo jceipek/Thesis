@@ -1,4 +1,6 @@
-﻿//======= Copyright (c) Valve Corporation, All rights reserved. ===============
+// Hololens compatibility:
+#if (UNITY_STANDALONE_WIN && !UNITY_EDITOR) && !UNITY_WSA_10_0
+//======= Copyright (c) Valve Corporation, All rights reserved. ===============
 //
 // Purpose: Simple two bone ik solver.
 //
@@ -168,3 +170,5 @@ public class SteamVR_IK : MonoBehaviour
 	}
 }
 
+
+#endif
