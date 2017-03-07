@@ -1,0 +1,49 @@
+Create
+Update
+Delete
+
+obj _ id
+    0 model
+    1 pos
+    2 rot
+    3 scale
+
+id, partid, newval
+id, partid, newval
+id, partid, newval
+id, partid, newval
+
+partid
+id, newval
+id, newval
+id, newval
+
+Create
+    id
+        model
+        pos
+        rot
+        scale
+
+Delete
+    id
+
+id, partid, seq, newval
+
+per client,
+    queue
+        id -> Action, Action, Action, Action
+
+
+
+c0, u1, u2, u3, u4, d5, c6, u7, u8
+
+if seq# for an update is higher than a previous one for the same partid, can discard the old one
+
+consider a create to be a put; if already exists, just replace
+
+drop any deletes if we have a newer create or update for the same object id
+
+when merging actions, keep the newest seq id
+
+

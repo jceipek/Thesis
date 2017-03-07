@@ -1,0 +1,62 @@
+{
+    id: #
+    seq: {
+        A:
+        B:
+        C:
+    }
+    vals: {
+        A:
+        B:
+        C:
+    }
+}
+
+{
+    id
+    A: [seq, v]
+    B: [seq, v]
+    C: [seq, v]
+}
+
+{
+    id
+    A: {
+        a: [seq, v]
+        b: [seq, v]
+        c: [seq, v]
+    }
+    B: [seq, v]
+    C: [seq, v]
+}
+
+create seq, #:
+{
+    id: #
+    A: [seq, 0]
+    B: [seq, 0]
+    C: [seq, 0]
+}
+
+update seq, #, N, V
+{
+    id: #
+    N: [seq, V]
+}
+
+delete #
+{
+    
+}
+
+
+
+create, update
+update, create
+    if create id > update
+delete, update
+    
+create, delete
+update, delete
+delete, create
+
