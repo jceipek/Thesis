@@ -43,7 +43,9 @@ export const enum GIZMO_VISUALS_FLAGS {
 export const enum CONTROLLER_ATTACHMENT_TYPE {
   NONE = 0X00,
   GRAB = 0X01,
-  DELETE = 0X02
+  DELETE = 0X02,
+  DUPLICATE = 0X03,
+  length
 }
 
 export const enum MODEL_TYPE {

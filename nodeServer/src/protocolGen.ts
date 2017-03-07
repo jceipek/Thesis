@@ -58,6 +58,8 @@ const CONTROLLER_ATTACHMENT_TYPES = [
   {cs: 'None', js: 'NONE'}
 , {cs: 'Grab', js: 'GRAB'}
 , {cs: 'Delete', js: 'DELETE'}
+, {cs: 'Duplicate', js: 'DUPLICATE'}
+, {cs: 'length', js: 'length'}
 ];
 
 const MODEL_TYPES = [
@@ -266,6 +268,7 @@ function jsCreateProtocolFromMessages (messages: IMessage[]) {
   output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.NONE] = MODEL_TYPE.NONE;\n"
   output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.GRAB] = MODEL_TYPE.CONTROLLER_ATTACHMENT_PLIERS;\n"
   output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DELETE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_VACUUM;\n\n"
+  output += "ATTACHMENT_TYPE_TO_MODEL[CONTROLLER_ATTACHMENT_TYPE.DUPLICATE] = MODEL_TYPE.CONTROLLER_ATTACHMENT_WRENCH;\n\n" // FIXME(JULIAN): Should probably not be a wrench...
 
   output += messages.map((message) => jsWriteForMessage(message)).join('\n')+'\n';
 

@@ -37,7 +37,7 @@ function stepSimulationAndSend () {
 
   let DEBUG_start_compute = process.hrtime();
 
-  let controllers = [];
+  let controllers : IController[] = [];
   for (let [client, inputData] of TRANSIENT_STATE.inputData) {
     for (let controller of inputData.controllers) {
       controllers.push(controller);
@@ -56,9 +56,9 @@ function stepSimulationAndSend () {
   Transfer.tryTransferState(STATE, TRANSIENT_STATE);
 
   // NOTE(JULIAN): This is for performance testing -- create an object every .5s
-  if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
-    STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame/100,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
-  }
+  // if (PERFORMANCE_TRACKER.currFrame % (FPS/2) === 0) {
+  //   STATE.entities.entities.push(makeEntity(Vec3.fromValues(0,0.5*PERFORMANCE_TRACKER.currFrame/100,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
+  // }
 
   STATE.globalTime += 1/FPS;
   PERFORMANCE_TRACKER.currFrame++;

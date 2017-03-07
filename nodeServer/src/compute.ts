@@ -1223,6 +1223,14 @@ function didControllerJustRelease (controller : IController) : boolean {
   return (controller.grab.curr === 0) && (controller.grab.last === 1);
 }
 
+function didControllerJustPressAction0 (controller : IController) : boolean {
+  return (controller.action0.curr === 1) && (controller.action0.last === 0);
+}
+
+function didControllerJustReleaseAction0 (controller : IController) : boolean {
+  return (controller.action0.curr === 0) && (controller.action0.last === 1);
+}
+
 function alterationThatUsesController (controller : IController, alterations : IAlteration[]) : IAlteration | null {
   for (let alteration of alterations) {
     switch (alteration.type) {
@@ -1337,7 +1345,10 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
     const usedAlteration = alterationThatUsesController(controller, STATE.inProgressAlterations);
     if (usedAlteration === null) {
       // Process if controller not used!
-      if (didControllerJustGrab(controller)) {
+      if (didControllerJustPressAction0(controller)) {
+        // Cycle to next attachment
+        controller.attachment = Math.max((controller.attachment+1)%CONTROLLER_ATTACHMENT_TYPE.length, 0x01);
+      } else if (didControllerJustGrab(controller)) {
         if (overlapsClosest) {
           // TODO(JULIAN): Consider making new alterations with multiple controllers for eg scale with two grab controllers
           const alterationsUsingClosestEntity = alterationsThatUseEntity(closestEntity, STATE.inProgressAlterations);
