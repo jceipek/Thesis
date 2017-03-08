@@ -409,22 +409,69 @@ function csCreateProtocolFromMessages (messages: IMessage[]) {
   \t\treturn new Quaternion(x, y, z, w);
   \t}\n\n`;
 
-  output += messages.map((message) => csReadForMessage(message)).join('\n')+'\n';
+  output += messages.map((message) => (message.name !== 'MultiMessage')? csReadForMessage(message) : "").join('\n')+'\n';
+
+  output += `
+\tpublic static bool DecodeMultiMessage (FixedSizeBuffer<NetMessage> messageBuffer, byte[] dataBuffer, int dataLength) {
+\t\tif (dataLength > 0) {
+\t\t\tint offset = 0;
+\t\t\tvar messageType = MessageTypeFromBuff(dataBuffer, ref offset);
+\t\t\tvar sequenceNumber = Int32FromBuff(dataBuffer, ref offset);
+\t\t\tint decodedCount = 0; 
+\t\t\twhile (offset < dataLength) {
+\t\t\t\tNetMessage newMessage;
+\t\t\t\tif (DecodeMessageUnchecked(dataBuffer, out newMessage, ref offset)) {
+\t\t\t\t\tmessageBuffer.Add(newMessage);
+\t\t\t\t\tdecodedCount++;
+\t\t\t\t} else {
+\t\t\t\t\tDebug.LogError("MultiMessage Decoding Problem");
+\t\t\t\t}
+\t\t\t}
+\t\t\treturn true;
+\t\t}
+\t\treturn false;
+\t}\n`;
+
+  output += `\n\tprivate static bool DecodeMessageUnchecked (byte[] buffer, out NetMessage decodedMessage, ref int offset) {\n`;
+  output += `\t\tvar messageType = MessageTypeFromBuff(buffer, ref offset);\n`;
+  output += `\t\tswitch (messageType) {`;
+  output += messages.map((message) => {
+  if (message.name !== 'MultiMessage') {
+    return `
+    \t\tcase MessageType.${message.name}:
+    \t\t\tdecodedMessage = Decode${message.name}(buffer, ref offset);
+    \t\t\treturn true;`
+  } else {
+    return "";
+  }}
+  ).join('');
+  output += `\n\t\t\tdefault:\n`;
+  output += `\t\t\t\tbreak;\n`;
+  // output += `\t\t\t}\n`;
+  output += `\t\t}\n`;
+  output += `\t\tdecodedMessage = new NetMessage { MessageType = MessageType.Unknown };\n`;
+  output += `\t\treturn false;\n`;
+  // output += "\t}\n";
+  output += "\t}\n";
 
   output += `\tpublic static bool DecodeMessage (byte[] buffer, int messageLength, out NetMessage decodedMessage) {\n`;
   output += `\t\tif (messageLength > 0) {\n`;
   output += `\t\t\tint offset = 0;\n`;
   output += `\t\t\tvar messageType = MessageTypeFromBuff(buffer, ref offset);\n`;
   output += `\t\t\tswitch (messageType) {`;
-  
-  output += messages.map((message) => `
-  \t\t\t\tcase MessageType.${message.name}:
-  \t\t\t\t\tif (messageLength == ${message.fields.reduce((acc, field) => acc+TYPE_INFO[field.customType].len, 0)}) {
-  \t\t\t\t\t\tdecodedMessage = Decode${message.name}(buffer, ref offset);
-  \t\t\t\t\t\treturn true;
-  \t\t\t\t\t}
-  \t\t\t\t\tbreak;`).join('');
-
+  output += messages.map((message) => {
+  if (message.name !== 'MultiMessage') {
+    return `
+    \t\t\t\tcase MessageType.${message.name}:
+    \t\t\t\t\tif (messageLength == ${message.fields.reduce((acc, field) => acc+TYPE_INFO[field.customType].len, 0)}) {
+    \t\t\t\t\t\tdecodedMessage = Decode${message.name}(buffer, ref offset);
+    \t\t\t\t\t\treturn true;
+    \t\t\t\t\t}
+    \t\t\t\t\tbreak;`;
+  } else {
+    return "";
+  }}
+  ).join('');
   output += `\n\t\t\t\tdefault:\n`;
   output += `\t\t\t\t\tbreak;\n`;
   output += `\t\t\t}\n`;

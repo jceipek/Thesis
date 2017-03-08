@@ -73,8 +73,9 @@ public class MessageHandler : MonoBehaviour {
     }
 
     void ProcessPositionRotationScaleVisibleTintModelMessage (NetMessage message) {
-        if (message.ObjectId < _lineSegments.Length) {
+        if (message.ObjectId < _models.Length) {
             // Debug.Log("ID: "+message.ObjectId);
+            // Debug.Log("ID: "+message.ModelType);
             if (_models[message.ObjectId] == null) {
                 _models[message.ObjectId] = (Instantiate(_modelPrefab, Vector3.zero, Quaternion.identity) as GameObject).GetComponent<Model>();
             }

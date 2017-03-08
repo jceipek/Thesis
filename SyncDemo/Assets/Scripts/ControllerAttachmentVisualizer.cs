@@ -1,32 +1,22 @@
 ﻿namespace Giverspace {
 	using UnityEngine;
 
-	[System.Serializable]
-	public struct ControllerAttachmentTypeToPrefab {
-		public ControllerAttachmentType ControllerAttachmentType;
-		public GameObject Prefab;
-	}
-
 	public class ControllerAttachmentVisualizer : MonoBehaviour {
-		[SerializeField] ControllerAttachmentTypeToPrefab[] _controllerAttachmentTypeToPrefabs;
+		[SerializeField] ControllerAttachmentsToPrefabs _attachmentsToPrefabs;
 
 		static GameObject[] _prefabsForModels;
 		GameObject[] _instancedModels;
 		GameObject _model;
 		ControllerAttachmentType _controllerAttachment = ControllerAttachmentType.None;
 
-		bool _initialized = false; 
+		bool _initialized = false;
 		void Init () {
-			int maxIndex = -1;
-			for (int i = 0; i < _controllerAttachmentTypeToPrefabs.Length; i++) {
-				if ((int)_controllerAttachmentTypeToPrefabs[i].ControllerAttachmentType > maxIndex) {
-					maxIndex = (int)_controllerAttachmentTypeToPrefabs[i].ControllerAttachmentType;
-				}
-			}
+			int maxIndex = _attachmentsToPrefabs.HighestAttachmentIndex;
 			_prefabsForModels = new GameObject[maxIndex+1];
 			_instancedModels = new GameObject[maxIndex+1];
-			for (int i = 0; i < _controllerAttachmentTypeToPrefabs.Length; i++) {
-				_prefabsForModels[(int)_controllerAttachmentTypeToPrefabs[i].ControllerAttachmentType] = _controllerAttachmentTypeToPrefabs[i].Prefab;
+
+			for (int i = 0; i < (int)ControllerAttachmentType.length; i++) {
+				_prefabsForModels[i] = _attachmentsToPrefabs.PrefabForAttachmentType((ControllerAttachmentType)i);
 			}
 			_initialized = true;
 		}

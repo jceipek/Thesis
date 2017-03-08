@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1cb356888b0142aa96697cb5f689dff, type: 3}
+  m_Name: ControllerAttachmentsToPrefabs
+  m_EditorClassIdentifier: 
+  _controllerAttachmentTypeToPrefabs:
+  - ControllerAttachmentType: 0
+    Prefab: {fileID: 0}
+  - ControllerAttachmentType: 1
+    Prefab: {fileID: 1000010293930918, guid: 867a60dddd1c74e33a4b172862abdcb8, type: 2}
+  - ControllerAttachmentType: 2
+    Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
+  - ControllerAttachmentType: 3
+    Prefab: {fileID: 1000013038996066, guid: 94481d5ac97ae4438a9a584b382f6633, type: 2}
