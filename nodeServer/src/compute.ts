@@ -1,3 +1,8 @@
+// TODO(JULIAN): Allow objects to be truly deleted and possibly recycled
+// However, we need to be sure that the object is not falsely referenced in that situation (eg as a child or as part of an entity list)
+// May mean we need to track parents
+// At the moment, it looks like we are not using children for anything but oven and clock buttons and shelf objects
+
 import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLAGS } from './protocol'
 import * as BPromise from 'bluebird'
 import * as FS from 'fs'
@@ -21,6 +26,7 @@ import {
 , IController
 , IInputData
 , IRule
+, IEntityIdentifier
 , ICondition
 , IConditionPresent
 , IConditionIntersect
@@ -249,22 +255,30 @@ function doesControllerOverlapObject (controller : IController, obj : IEntity, o
                          , _tempVec, obj.interactionVolume);
 }
 
+function makeEntityIdentifier (entity: IEntity) : IEntityIdentifier {
+  return { type: entity.type };
+}
+
+function doEntityIdentifiersMatch (a: IEntityIdentifier, b: IEntityIdentifier) {
+  return a.type === b.type;
+}
+
 function makePresentCondition (entity : IEntity) : IConditionPresent {
-  return { type: CONDITION_TYPE.PRESENT, entity: entity, originalEntityCopy: cloneEntity(entity) };
+  return { type: CONDITION_TYPE.PRESENT, entityIdentifier: makeEntityIdentifier(entity) };
 }
 
 function makeIntersectCondition (entityA : IEntity, entityB : IEntity) : IConditionIntersect {
-  return { type: CONDITION_TYPE.INTERSECT, entityA: entityA, entityB: entityB };
+  return { type: CONDITION_TYPE.INTERSECT, entityIdentifierA: makeEntityIdentifier(entityA), entityIdentifierB: makeEntityIdentifier(entityB) };
 }
 
 function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
   if (condA.type === condB.type) {
     switch (condA.type) {
       case CONDITION_TYPE.PRESENT:
-        return (<IConditionPresent>condA).entity.type === (<IConditionPresent>condB).entity.type;
+        return doEntityIdentifiersMatch((<IConditionPresent>condA).entityIdentifier,(<IConditionPresent>condA).entityIdentifier);
       case CONDITION_TYPE.INTERSECT:
-        return (<IConditionIntersect>condA).entityA.type === (<IConditionIntersect>condB).entityA.type &&
-               (<IConditionIntersect>condA).entityB.type === (<IConditionIntersect>condB).entityB.type; 
+        return doEntityIdentifiersMatch((<IConditionIntersect>condA).entityIdentifierA, (<IConditionIntersect>condB).entityIdentifierA) &&
+               doEntityIdentifiersMatch((<IConditionIntersect>condA).entityIdentifierB, (<IConditionIntersect>condB).entityIdentifierB);
     }
   }
   return false;
@@ -433,6 +447,10 @@ function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule 
   };
 }
 
+function createProjectionOfEntities () {
+
+}
+
 function setControllerInteractionPoint (outPt : IVector3, inPos : IVector3, inRot : IQuaternion, attachment : CONTROLLER_ATTACHMENT_TYPE) {
   switch (attachment) {
     case CONTROLLER_ATTACHMENT_TYPE.GRAB:
@@ -556,16 +574,16 @@ function getIndexOfConditionsInRules (conditions: ICondition[], rules: IRule[]) 
   return -1;
 }
 
-type CollisionHash = number;
+type ICollisionHash = number;
 
-function unordered2EntityHash (entityA : IEntity, entityB : IEntity) : CollisionHash {
+function unordered2EntityIdentifierHash (entityAIdentifier : IEntityIdentifier, entityBIdentifier : IEntityIdentifier) : ICollisionHash {
   let min, max;
-  if (entityA.type < entityB.type) {
-    min = entityA.type;
-    max = entityB.type;
+  if (entityAIdentifier.type < entityBIdentifier.type) {
+    min = entityAIdentifier.type;
+    max = entityBIdentifier.type;
   } else {
-    min = entityB.type;
-    max = entityA.type;
+    min = entityBIdentifier.type;
+    max = entityAIdentifier.type;
   }
   return ((max << 16) ^ min);
 }
@@ -573,18 +591,18 @@ function unordered2EntityHash (entityA : IEntity, entityB : IEntity) : Collision
 function doesRuleApplyToEntityConfiguration (rule : IRule, entities : IEntity[]) : boolean {
   //TODO(JULIAN): Ensure that this works for interesting intersection cases (since we're ignoring entity refs)
   let requiredPresent = new Map<MODEL_TYPE,number>();
-  let requiredIntersect = new Map<CollisionHash,number>();
+  let requiredIntersect = new Map<ICollisionHash,number>();
 
   for (let cond of rule.conditions) {
     switch (cond.type) {
       case CONDITION_TYPE.PRESENT:
-        const comparisonType = (<IConditionPresent>cond).entity.type; 
+        const comparisonType = (<IConditionPresent>cond).entityIdentifier.type;
         requiredPresent.set(comparisonType, (requiredPresent.get(comparisonType) || 0)+1);
         break;
       case CONDITION_TYPE.INTERSECT:
-        const comparisonA = (<IConditionIntersect>cond).entityA;
-        const comparisonB = (<IConditionIntersect>cond).entityB;
-        const test = unordered2EntityHash(comparisonA, comparisonB);
+        const comparisonA = (<IConditionIntersect>cond).entityIdentifierA;
+        const comparisonB = (<IConditionIntersect>cond).entityIdentifierB;
+        const test = unordered2EntityIdentifierHash(comparisonA, comparisonB);
         requiredIntersect.set(test, (requiredIntersect.get(test) || 0) + 1);
         break;
     }
@@ -600,7 +618,7 @@ function doesRuleApplyToEntityConfiguration (rule : IRule, entities : IEntity[])
     for (let index2 = index1+1; index2 < entities.length; index2++) {
       const e2 = entities[index2];
       if (doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
-        const test = unordered2EntityHash(e1, e2);
+        const test = unordered2EntityIdentifierHash(makeEntityIdentifier(e1), makeEntityIdentifier(e2));
         const eCount = requiredIntersect.get(test) || 0;
         if (eCount === 0) {
           return false;
@@ -686,6 +704,8 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
          , actionIndex: -1
          , lastRule: null
          , currRule: null
+         , currRuleSymbolMap: []
+         , currRuleEntities: makeEntityList(pos, rot)
          };
 }
 
@@ -1081,10 +1101,12 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
       // We switched to a different rule!
       STATE.oven.actionIndex = STATE.oven.currRule.actions.length - 1;
       console.log("Switched to a different rule");
+      // TODO(JULIAN): Instead of showing and hiding, we can delete and create for the new rule...
       showEntities(STATE.oven.currRule.entities);
       if (STATE.oven.lastRule !== null) {
         hideEntities(STATE.oven.lastRule.entities);
       }
+      // TODO(JULIAN): Now we need to make the new symbol map, create the requisite entities, and simulate the execution of the actions on the entities we created, updating the symbol map if necessary
     }
     // NOTE(JULIAN): Action recording is handled outside of this function, which may be a bit odd
   } else {
@@ -1111,6 +1133,7 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
     // XXX(JULIAN): Handle this better
     for (let cond of STATE.oven.currRule.conditions) {
       if (cond.type === CONDITION_TYPE.PRESENT) {
+        // FIXME(JULIAN): Need to delete and recreate projected entities
         copyEntityData(/*out*/(<IConditionPresent>cond).entity, (<IConditionPresent>cond).originalEntityCopy);
       }
     }
@@ -1164,9 +1187,9 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
 function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const cond = rule.conditions[0];
   if (cond.type === CONDITION_TYPE.PRESENT) {
-    const eType = (<IConditionPresent>cond).entity.type;
+    const eIdentifier = (<IConditionPresent>cond).entityIdentifier;
     for (let entity of entityList.entities) {
-      if (entity.type === eType && !excludeIds.has(entity.id)) {
+      if (doEntityIdentifiersMatch(makeEntityIdentifier(entity), eIdentifier) && !excludeIds.has(entity.id)) {
         for (let action of rule.actions) {
           performActionOnEntity(action, entity);
         }
@@ -1178,7 +1201,7 @@ function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds
 function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
 
-  const hash = unordered2EntityHash(presentConds[0].entity, presentConds[1].entity);
+  const hash = unordered2EntityIdentifierHash(presentConds[0].entityIdentifier, presentConds[1].entityIdentifier);
 
   const entities = entityList.entities;
   for (let e1Index = 0; e1Index < entities.length; e1Index++) {
@@ -1188,8 +1211,10 @@ function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds
       if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
         continue;
       }
-      if (unordered2EntityHash(e1, e2) === hash) {
-        if (e1.type !== presentConds[0].entity.type) {
+      let e1Identifier = makeEntityIdentifier(e1);
+      let e2Identifier = makeEntityIdentifier(e2);
+      if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash) {
+        if (!doEntityIdentifiersMatch(e1Identifier, presentConds[0].entityIdentifier)) {
           const temp = e1;
           e1 = e2;
           e2 = temp;
@@ -1198,7 +1223,8 @@ function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds
           switch (action.type) {
             case ACTION_TYPE.MOVE_BY:
             case ACTION_TYPE.DELETE:
-            if ((<IActionWithEntity>action).entity === presentConds[0].entity) {
+            // FIXME(JULIAN): IActionWithEntity will require a symbolic match instead!
+            if (makeEntityIdentifier((<IActionWithEntity>action).entity) === presentConds[0].entityIdentifier) {
               performActionOnEntity(action, e1);
             } else {
               performActionOnEntity(action, e2);
@@ -1220,7 +1246,7 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
     return;
   }
 
-  const hash = unordered2EntityHash(intersectCond.entityA, intersectCond.entityB);
+  const hash = unordered2EntityIdentifierHash(intersectCond.entityIdentifierA, intersectCond.entityIdentifierB);
 
   const entities = entityList.entities;
   for (let e1Index = 0; e1Index < entities.length; e1Index++) {
@@ -1230,9 +1256,11 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
       if (excludeIds.has(e1.id) || excludeIds.has(e2.id) || (e1.deleted) || (e2.deleted) || (!e1.visible) || (!e2.visible)) {
         continue;
       }
-      if (unordered2EntityHash(e1, e2) === hash &&
+      let e1Identifier = makeEntityIdentifier(e1);
+      let e2Identifier = makeEntityIdentifier(e2);
+      if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash &&
           doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
-        if (e1.type !== intersectCond.entityA.type) {
+        if (!doEntityIdentifiersMatch(e1Identifier, intersectCond.entityIdentifierA)) {
           const temp = e1;
           e1 = e2;
           e2 = temp;
@@ -1241,7 +1269,8 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
           switch (action.type) {
             case ACTION_TYPE.MOVE_BY:
             case ACTION_TYPE.DELETE:
-            if ((<IActionWithEntity>action).entity === intersectCond.entityA) {
+            // FIXME(JULIAN): Need to switch to using symbol matching!
+            if (doEntityIdentifiersMatch(makeEntityIdentifier((<IActionWithEntity>action).entity), intersectCond.entityIdentifierA)) {
               performActionOnEntity(action, e1);
             } else {
               performActionOnEntity(action, e2);

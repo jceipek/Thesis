@@ -122,14 +122,21 @@ export interface ICondition {
   type: CONDITION_TYPE;
 }
 
+export type IEntitySymbol = number;
+
+export interface IEntityIdentifier {
+  type: MODEL_TYPE;
+}
+
 export interface IConditionPresent extends ICondition {
-  entity: IEntity;
-  originalEntityCopy: IEntity;
+  entityIdentifier: IEntityIdentifier;
 }
 
 export interface IConditionIntersect extends ICondition {
-  entityA: IEntity;
-  entityB: IEntity;
+  // entityA: IEntity;
+  // entityB: IEntity;
+  entityIdentifierA: IEntityIdentifier;
+  entityIdentifierB: IEntityIdentifier;
 }
 
 // ALTERATIONS
@@ -208,9 +215,17 @@ export interface IOven {
   buttonModels: Map<MODEL_TYPE, IEntity>;
   rules: IRule[];
 
+  // Temp stuff relating to curr rule:
   actionIndex: number;
   lastRule: IRule;
   currRule: IRule;
+  currRuleSymbolMap: ISymbolMap;
+  currRuleEntities: IEntityList;
+}
+
+export interface ISymbolMap {
+  [index: number]: IEntity;
+  length: number;
 }
 
 export interface IShelf {
