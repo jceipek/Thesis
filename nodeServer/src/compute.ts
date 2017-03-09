@@ -26,6 +26,7 @@ import {
 , IController
 , IInputData
 , IRule
+, IEntitySymbol
 , IEntityIdentifier
 , ICondition
 , IConditionPresent
@@ -447,8 +448,25 @@ function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule 
   };
 }
 
-function createProjectionOfEntities () {
-
+function createProjectionOfConditions (conditions: ICondition[], oven: IOven) {
+  let currPos = Vec3.fromValues(0,1.17,0);
+  let currSymbol : IEntitySymbol = 0;
+  for (let cond of conditions) {
+    switch (cond.type) {
+      case CONDITION_TYPE.PRESENT:
+        let presentCond = <IConditionPresent>cond;
+        makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
+                  , new Uint8Array([0x00,0x00,0xEE,0xEE])
+                  , presentCond.entityIdentifier.type);
+        oven.currRuleSymbolMap[currSymbol] = 
+        
+        break;
+      case CONDITION_TYPE.INTERSECT:
+    
+      default:
+        break;
+    }
+  }
 }
 
 function setControllerInteractionPoint (outPt : IVector3, inPos : IVector3, inRot : IQuaternion, attachment : CONTROLLER_ATTACHMENT_TYPE) {
