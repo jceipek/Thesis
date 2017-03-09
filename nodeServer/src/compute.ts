@@ -27,10 +27,12 @@ import {
 , IAlteration
 , IControllerMetadata
 , IAlterationMove
+, IAlterationDuplicate
 , IAlterationDelete
 , IAction
 , IActionWithEntity
 , IActionMoveBy
+, IActionDuplicate
 , IActionDelete
 , IOven
 , IShelf
@@ -351,6 +353,49 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
 
   return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
                         , entity: moveAlteration.entity
+                        , posOffset: deltaPos
+                        , rotOffset: deltaRot };
+}
+
+function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDuplicate) : IActionDuplicate {
+  const controllerPos = duplicateAlteration.controllerMetadata.controller.pos;
+  const controllerRot = duplicateAlteration.controllerMetadata.controller.rot;
+  let entityTargetPos = Vec3.clone(controllerPos);
+  let entityTargetRot = Quat.clone(controllerRot);
+  applyInverseOffsetToPosRot(entityTargetPos, entityTargetRot, entityTargetPos, entityTargetRot, duplicateAlteration.entitiesList.offsetPos, duplicateAlteration.entitiesList.offsetRot);
+  Vec3.copy(controllerPos, entityTargetPos);
+  Vec3.add(/*out*/entityTargetPos
+          , entityTargetPos, Vec3.transformQuat(/*out*/Vec3.create()
+                                              , duplicateAlteration.controllerMetadata.offsetPos, entityTargetRot));
+
+  Quat.mul(/*out*/entityTargetRot, entityTargetRot, duplicateAlteration.controllerMetadata.offsetRot);
+
+  let entityStartPos = duplicateAlteration.controllerMetadata.entityStartPos;
+  let entityStartRot = duplicateAlteration.controllerMetadata.entityStartRot;
+
+  const controllerMetadata = duplicateAlteration.controllerMetadata;
+
+  const oldControllerRot = Quat.create();
+  const oldControllerPos = Vec3.create();
+  Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
+  Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+
+  const oldDir = Vec3.create(); 
+  Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+  Vec3.normalize(/*out*/oldDir, oldDir);
+  const newDir = Vec3.create(); 
+  Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+  Vec3.normalize(/*out*/newDir, newDir);
+
+  const deltaPos = Vec3.create(); 
+  const deltaRot = Quat.create();
+  Vec3.sub(/*out*/deltaPos, entityTargetPos, entityStartPos);
+  Quat.invert(/*out*/deltaRot, entityStartRot);
+  Vec3.transformQuat(/*out*/deltaPos, deltaPos, deltaRot);
+  Quat.mul(/*out*/deltaRot, entityTargetRot, deltaRot);
+
+  return <IActionDuplicate>{ type: ACTION_TYPE.DUPLICATE
+                        , entity: duplicateAlteration.entity
                         , posOffset: deltaPos
                         , rotOffset: deltaRot };
 }
@@ -740,6 +785,17 @@ function makeMoveAlteration (entity : IEntity, controller : IController, movemen
   , entity: entity
   , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
   , constraint: movementConstraint
+  };
+}
+
+function makeDuplicateAlteration (entity : IEntity, entityCopy : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationDuplicate {
+  return {
+    type: ALTERATION_TYPE.DUPLICATE
+  , valid: true
+  , entitiesList: entitiesList
+  , entity: entity
+  , entityCopy: entityCopy
+  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
   };
 }
 
@@ -1357,7 +1413,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
           }
 
           switch (controller.attachment) {
-            case CONTROLLER_ATTACHMENT_TYPE.GRAB:
+            case CONTROLLER_ATTACHMENT_TYPE.GRAB: {
               if (sourceList === ovenEntities) {
                 console.log("MAKING OVEN ALTERATION");
               }
@@ -1368,26 +1424,29 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
                 worldEntities.entities.push(closestEntity);
               }
               newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList));
-              break;
-            case CONTROLLER_ATTACHMENT_TYPE.DELETE:
+            } break;
+            case CONTROLLER_ATTACHMENT_TYPE.DELETE: {
               if (sourceList !== shelfEntities) {
                 newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
               }
-              break;
-            case CONTROLLER_ATTACHMENT_TYPE.DUPLICATE:
-                closestEntity = cloneEntity(closestEntity);
-                applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
-                sourceList = worldEntities;
-                worldEntities.entities.push(closestEntity);
-                newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList)); // TODO(JULIAN): Convert to duplicate alteration!
-                                                                                                                      // Also, what happens when becomes invalid???
+            } break;
+            case CONTROLLER_ATTACHMENT_TYPE.DUPLICATE: {
+              // XXX(JULIAN): Any transformations we make to a duplicated object in the oven won't work!
+              // And even duplicating an object in the oven won't work as of yet!
+              let sourceEntity = closestEntity;
+              let entityClone = cloneEntity(closestEntity);
+              applyOffsetToEntity(entityClone, sourceList.offsetPos, sourceList.offsetRot);
+              sourceList = worldEntities; // XXX(JULIAN): Awkward because it ignores the actual sourceList
+              worldEntities.entities.push(entityClone);
+              newInProgressAlterations.push(makeDuplicateAlteration(sourceEntity, entityClone, controller, sourceList)); // TODO(JULIAN): ensure that becoming invalid makes sense (I think it should already)
+            } break;
           }
         }
       }
     } else if (usedAlteration.valid) {
       // Process if controller already used!
       switch (usedAlteration.type) {
-        case ALTERATION_TYPE.MOVE:
+        case ALTERATION_TYPE.MOVE: {
           const entityToMove = (<IAlterationMove>usedAlteration).entity;
           const controllerMetadata = (<IAlterationMove>usedAlteration).controllerMetadata;
 
@@ -1449,18 +1508,62 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
 
           
           if (didControllerJustRelease(controller)) {
-            // DELETE this alteration; make a new action for it...
+            // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
             if (usedAlteration.entitiesList === ovenEntities) {
               newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration));
             }
           } else {
             newInProgressAlterations.push(usedAlteration);
           }
-        break;
+        } break;
+        case ALTERATION_TYPE.DUPLICATE: {
+          const entityToDuplicate = (<IAlterationDuplicate>usedAlteration).entity;
+          const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata;
+
+          const controllerPos = _tempVec;
+          const controllerRot = _tempQuat;
+          applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
+                                    , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
+
+          
+          const entityTargetPos = Vec3.create();
+          Vec3.add(/*out*/entityTargetPos
+                  , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
+                                                      , controllerMetadata.offsetPos, controllerRot));
+
+          // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
+          // offsetRot = Quat.invert(controllerRot) * entity.rot
+
+          const oldControllerRot = Quat.create();
+          const oldControllerPos = Vec3.create();
+          Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
+          Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+
+          const oldDir = Vec3.create(); 
+          Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+          Vec3.normalize(/*out*/oldDir, oldDir);
+          const newDir = Vec3.create(); 
+          Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+          Vec3.normalize(/*out*/newDir, newDir);
+
+
+          const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
+          Vec3.copy(/*out*/entityToDuplicate.pos, entityTargetPos);
+          Quat.copy(/*out*/entityToDuplicate.rot, entityTargetRot);
+          
+          if (didControllerJustRelease(controller)) {
+            // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
+            if (usedAlteration.entitiesList === ovenEntities) {
+              newOvenActions.push(makeDuplicateActionFromAlteration(<IAlterationDuplicate>usedAlteration));
+            }
+          } else {
+            newInProgressAlterations.push(usedAlteration);
+          }
+        } break;
         case ALTERATION_TYPE.DELETE:
           const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
           entityToDelete.deleted = true;
-          // DELETE this alteration; make a new action for it...
+          // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
           if (usedAlteration.entitiesList === ovenEntities) {
             newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
           }

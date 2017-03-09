@@ -137,6 +137,7 @@ export interface IConditionIntersect extends ICondition {
 export const enum ALTERATION_TYPE {
   MOVE
 , DELETE
+, DUPLICATE
 }
 
 export interface IAlteration {
@@ -159,6 +160,12 @@ export interface IAlterationMove extends IAlteration {
   constraint: GIZMO_VISUALS_FLAGS;
 }
 
+export interface IAlterationDuplicate extends IAlteration {
+  entity: IEntity;
+  entityCopy: IEntity;
+  controllerMetadata: IControllerMetadata;
+}
+
 export interface IAlterationDelete extends IAlteration {
   entity: IEntity;
   controllerMetadata : IControllerMetadata;
@@ -167,7 +174,7 @@ export interface IAlterationDelete extends IAlteration {
 // ACTIONS
 
 export const enum ACTION_TYPE {
-  MOVE_BY, DELETE
+  MOVE_BY, DELETE, DUPLICATE
 }
 
 export interface IAction {
@@ -180,6 +187,11 @@ export interface IActionWithEntity extends IAction {
 }
 
 export interface IActionMoveBy extends IActionWithEntity {
+  posOffset: IVector3;
+  rotOffset: IQuaternion;
+}
+
+export interface IActionDuplicate extends IActionWithEntity {
   posOffset: IVector3;
   rotOffset: IQuaternion;
 }
