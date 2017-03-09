@@ -1374,6 +1374,13 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
                 newInProgressAlterations.push(makeDeleteAlteration(closestEntity, controller, sourceList));
               }
               break;
+            case CONTROLLER_ATTACHMENT_TYPE.DUPLICATE:
+                closestEntity = cloneEntity(closestEntity);
+                applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
+                sourceList = worldEntities;
+                worldEntities.entities.push(closestEntity);
+                newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList)); // TODO(JULIAN): Convert to duplicate alteration!
+                                                                                                                      // Also, what happens when becomes invalid???
           }
         }
       }
