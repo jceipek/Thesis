@@ -79,6 +79,7 @@ const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.517
 
 export const STATE : IState = getInitialState();
 
+// TODO(JULIAN): Modify to make this recycle deleted entities
 export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
   return {
     type: type
@@ -93,6 +94,11 @@ export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, t
   , deleted: false
   , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
   };
+}
+
+function deleteEntity (entity: IEntity) {
+  // TODO(JULIAN): Truly delete the entity
+  entity.deleted = true;
 }
 
 function copyEntityData (out : IEntity, entity : IEntity) {
@@ -132,6 +138,17 @@ function cloneEntity (entity : IEntity) : IEntity {
   , deleted: entity.deleted
   , gizmoVisuals: entity.gizmoVisuals
   };
+}
+
+function removeEntityFromEntityList (entity : IEntity, entityList: IEntityList) {
+  entityList.entities.splice(entityList.entities.indexOf(entity));
+}
+
+function deleteAllInEntityList (entityList : IEntityList) {
+  var entities = entityList.entities.splice(0);
+  for (let i = entities.length - 1; i >= 0; i--) {
+    deleteEntity(entities[i]);
+  }
 }
 
 function applyOffsetToEntity (entity : IEntity, offsetPos : IVector3, offsetRot : IQuaternion) {
@@ -449,22 +466,27 @@ function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule 
 }
 
 function createProjectionOfConditions (conditions: ICondition[], oven: IOven) {
+  deleteAllInEntityList(oven.currRuleEntities);
   let currPos = Vec3.fromValues(0,1.17,0);
   let currSymbol : IEntitySymbol = 0;
   for (let cond of conditions) {
-    switch (cond.type) {
-      case CONDITION_TYPE.PRESENT:
-        let presentCond = <IConditionPresent>cond;
-        makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
-                  , new Uint8Array([0x00,0x00,0xEE,0xEE])
-                  , presentCond.entityIdentifier.type);
-        oven.currRuleSymbolMap[currSymbol] = 
-        
-        break;
-      case CONDITION_TYPE.INTERSECT:
-    
-      default:
-        break;
+    if (cond.type === CONDITION_TYPE.PRESENT) {
+      let presentCond = <IConditionPresent>cond;
+      let entity = makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
+                              , new Uint8Array([0x00,0x00,0xEE,0xEE])
+                              , presentCond.entityIdentifier.type);
+      oven.currRuleSymbolMap[currSymbol++] = entity;
+      oven.currRuleEntities.entities.push(entity);
+    }
+  }
+  for (let cond of conditions) {
+    if (cond.type === CONDITION_TYPE.INTERSECT) {
+      let presentCond = <IConditionIntersect>cond;
+      // let entity = makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
+      //                         , new Uint8Array([0x00,0x00,0xEE,0xEE])
+      //                         , presentCond.entityIdentifier.type);
+      // oven.currRuleSymbolMap[currSymbol++] = entity;
+      // oven.currRuleEntities.entities.push(entity);
     }
   }
 }
@@ -866,7 +888,7 @@ function restoreEntitiesFromStoredEntities (state : IState) {
   }
   for (let entity of state.entities.entities) {
     if (oldEntityIds.has(entity.id)) {
-      entity.deleted = true; // XXX(JULIAN): Would be better to actually delete the entity?
+      deleteEntity(entity);
       state.storedEntities.entities.push(entity);
     }
   }
@@ -1197,7 +1219,7 @@ function performActionOnEntity (action : IAction, entity : IEntity) {
       Quat.mul(entity.rot, entity.rot, (<IActionMoveBy>action).rotOffset);
       break;
     case ACTION_TYPE.DELETE:
-      entity.deleted = true;
+      deleteEntity(entity);
       break;
   }
 }
@@ -1609,7 +1631,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
         } break;
         case ALTERATION_TYPE.DELETE:
           const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
-          entityToDelete.deleted = true;
+          deleteEntity(entityToDelete);
           // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
           if (usedAlteration.entitiesList === ovenEntities) {
             newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
