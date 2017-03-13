@@ -26,7 +26,9 @@ import {
 , IController
 , IInputData
 , IRule
+, ENTITY_SYMBOL_NULL
 , IEntitySymbol
+, ISymbolMap
 , IEntityIdentifier
 , ICondition
 , IConditionPresent
@@ -97,8 +99,10 @@ export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, t
 }
 
 function deleteEntity (entity: IEntity) {
+  // FIXME(JULIAN): Remove entity from entitylist!
   // TODO(JULIAN): Truly delete the entity
   entity.deleted = true;
+  STATE.recycleableEntities.entities.push(entity);
 }
 
 function copyEntityData (out : IEntity, entity : IEntity) {
@@ -281,12 +285,12 @@ function doEntityIdentifiersMatch (a: IEntityIdentifier, b: IEntityIdentifier) {
   return a.type === b.type;
 }
 
-function makePresentCondition (entity : IEntity) : IConditionPresent {
-  return { type: CONDITION_TYPE.PRESENT, entityIdentifier: makeEntityIdentifier(entity) };
+function makePresentCondition (entity : IEntity, symbol: IEntitySymbol) : IConditionPresent {
+  return { type: CONDITION_TYPE.PRESENT, entityIdentifier: makeEntityIdentifier(entity), entitySymbol: symbol };
 }
 
-function makeIntersectCondition (entityA : IEntity, entityB : IEntity) : IConditionIntersect {
-  return { type: CONDITION_TYPE.INTERSECT, entityIdentifierA: makeEntityIdentifier(entityA), entityIdentifierB: makeEntityIdentifier(entityB) };
+function makeIntersectCondition (entityA : IEntity, entitySymbolA : IEntitySymbol, entityB : IEntity, entitySymbolB : IEntitySymbol) : IConditionIntersect {
+  return { type: CONDITION_TYPE.INTERSECT, entityIdentifierA: makeEntityIdentifier(entityA), entitySymbolA: entitySymbolA, entityIdentifierB: makeEntityIdentifier(entityB), entitySymbolB: entitySymbolB };
 }
 
 function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
@@ -302,9 +306,9 @@ function conditionsEqual (condA : ICondition, condB : ICondition) : boolean {
   return false;
 }
 
-function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete) : IActionDelete {
+function makeDeleteActionFromAlteration (deleteAlteration : IAlterationDelete, symbolMap : ISymbolMap) : IActionDelete {
   return { type: ACTION_TYPE.DELETE
-         , entity: deleteAlteration.entity};
+         , entitySymbol: symbolForEntityInMap(deleteAlteration.entity, symbolMap) };
 }
 
 function vectorConstFromGizmoFlag (flag : GIZMO_VISUALS_FLAGS) {
@@ -323,7 +327,7 @@ function vectorConstFromGizmoFlag (flag : GIZMO_VISUALS_FLAGS) {
   }
 }
 
-function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IActionMoveBy {
+function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove, symbolMap : ISymbolMap) : IActionMoveBy {
   const controllerPos = moveAlteration.controllerMetadata.controller.pos;
   const controllerRot = moveAlteration.controllerMetadata.controller.rot;
   let entityTargetPos = Vec3.clone(controllerPos);
@@ -361,7 +365,7 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
     case GIZMO_VISUALS_FLAGS.ZAxis:
       displaceAlongAxisDelta(/*modified*/entityTargetPos, vectorConstFromGizmoFlag(constraint), entityStartPos, entityStartRot, entityTargetPos);
       return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
-                            , entity: moveAlteration.entity
+                            , entitySymbol: symbolForEntityInMap(moveAlteration.entity, symbolMap)
                             , posOffset: entityTargetPos
                             , rotOffset: Quat.create() };
     case GIZMO_VISUALS_FLAGS.XRing:
@@ -369,7 +373,7 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
     case GIZMO_VISUALS_FLAGS.ZRing:
       displaceAlongFromToRotationDelta(/*modified*/entityTargetRot, vectorConstFromGizmoFlag(constraint), entityStartRot, oldDir, newDir);
       return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
-                            , entity: moveAlteration.entity
+                            , entitySymbol: symbolForEntityInMap(moveAlteration.entity, symbolMap)
                             , posOffset: Vec3.create()
                             , rotOffset: entityTargetRot };
     default:
@@ -384,12 +388,12 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove) : IAc
   Quat.mul(/*out*/deltaRot, entityTargetRot, deltaRot);
 
   return <IActionMoveBy>{ type: ACTION_TYPE.MOVE_BY
-                        , entity: moveAlteration.entity
+                        , entitySymbol: symbolForEntityInMap(moveAlteration.entity, symbolMap)
                         , posOffset: deltaPos
                         , rotOffset: deltaRot };
 }
 
-function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDuplicate) : IActionDuplicate {
+function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDuplicate, symbolMap : ISymbolMap) : IActionDuplicate {
   const controllerPos = duplicateAlteration.controllerMetadata.controller.pos;
   const controllerRot = duplicateAlteration.controllerMetadata.controller.rot;
   let entityTargetPos = Vec3.clone(controllerPos);
@@ -427,67 +431,91 @@ function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDup
   Quat.mul(/*out*/deltaRot, entityTargetRot, deltaRot);
 
   return <IActionDuplicate>{ type: ACTION_TYPE.DUPLICATE
-                        , entity: duplicateAlteration.entity
+                        , entitySymbol: symbolForEntityInMap(duplicateAlteration.entity, symbolMap)
                         , posOffset: deltaPos
                         , rotOffset: deltaRot };
 }
 
 function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule {
-  //FIXME TODO(JULIAN): IMPLEMENT ME 
   let offset = 0;
   const conditions : ICondition[] = [];
-  const entitiesList = makeEntityList(state.oven.model.pos, state.oven.model.rot);
-  const ruleEntities : IEntity[] = [];
   const firstEntityPos = Vec3.clone(entities[0].pos);
+  let currSymbol : IEntitySymbol = 0;
+  let entityToSymbol = new Map<IEntity, IEntitySymbol>();
   Vec3.sub(/*out*/firstEntityPos, firstEntityPos, Vec3.fromValues(0,1.17,0));
   for (let entity of entities) {
-    const clone = cloneEntity(entity);
-    Vec3.sub(/*out*/clone.pos, clone.pos, firstEntityPos);
-    Quat.copy(/*out*/clone.rot, IDENT_QUAT);
-    ruleEntities.push(clone);
-    conditions.push(makePresentCondition(clone));
+    conditions.push(makePresentCondition(entity, currSymbol));
+    entityToSymbol.set(entity, currSymbol);
+    currSymbol++;
   }
-  for (let e1Index = 0; e1Index < ruleEntities.length; e1Index++) {
-    const e1 = ruleEntities[e1Index];
-    for (let e2Index = e1Index+1; e2Index < ruleEntities.length; e2Index++) { // This way we don't duplicate intersection conditions (we store A-B but not B-A)
-      const e2 = ruleEntities[e2Index];
+  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
+    const e1 = entities[e1Index];
+    for (let e2Index = e1Index+1; e2Index < entities.length; e2Index++) { // This way we don't duplicate intersection conditions (we store A-B but not B-A)
+      const e2 = entities[e2Index];
       if (doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
-        conditions.push(makeIntersectCondition(e1, e2));
+        conditions.push(makeIntersectCondition(e1, entityToSymbol.get(e1), e2, entityToSymbol.get(e2)));
       }
     }
   }
-  entitiesList.entities.push(...ruleEntities);
 
   return {
     conditions: conditions
   , actions: []
-  , entities: entitiesList
   };
 }
 
-function createProjectionOfConditions (conditions: ICondition[], oven: IOven) {
-  deleteAllInEntityList(oven.currRuleEntities);
+function clearOvenProjection (oven : IOven) {
+  oven.currRuleSymbolMap.length = 0;
+  deleteAllInEntityList(oven.currRuleEntities);  
+}
+
+function projectConditionsInOven (conditions: ICondition[], oven: IOven) {
+  clearOvenProjection(oven);
   let currPos = Vec3.fromValues(0,1.17,0);
-  let currSymbol : IEntitySymbol = 0;
+  const offset = Vec3.fromValues(0,0.05*2.3,0); // TODO(JULIAN): Is this big enough?
+  let intersectConds : IConditionIntersect[] = [];
   for (let cond of conditions) {
-    if (cond.type === CONDITION_TYPE.PRESENT) {
-      let presentCond = <IConditionPresent>cond;
-      let entity = makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
-                              , new Uint8Array([0x00,0x00,0xEE,0xEE])
-                              , presentCond.entityIdentifier.type);
-      oven.currRuleSymbolMap[currSymbol++] = entity;
-      oven.currRuleEntities.entities.push(entity);
+    switch (cond.type) {
+      case CONDITION_TYPE.PRESENT: {
+        let presentCond = <IConditionPresent>cond;
+        let entity = makeEntity(Vec3.clone(currPos) , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
+                                , new Uint8Array([0x00,0x00,0xEE,0xEE])
+                                , presentCond.entityIdentifier.type);
+        oven.currRuleSymbolMap[presentCond.entitySymbol] = entity;
+        oven.currRuleEntities.entities.push(entity);
+        Vec3.add(/*out*/currPos, currPos, offset);
+      } break;
+      case CONDITION_TYPE.INTERSECT: {
+        intersectConds.push(<IConditionIntersect>cond);
+      } break;
     }
   }
-  for (let cond of conditions) {
-    if (cond.type === CONDITION_TYPE.INTERSECT) {
-      let presentCond = <IConditionIntersect>cond;
-      // let entity = makeEntity(currPos , Quat.clone(IDENT_QUAT), Vec3.clone(UNIT_VECTOR3)
-      //                         , new Uint8Array([0x00,0x00,0xEE,0xEE])
-      //                         , presentCond.entityIdentifier.type);
-      // oven.currRuleSymbolMap[currSymbol++] = entity;
-      // oven.currRuleEntities.entities.push(entity);
+
+  // TODO XXX(JULIAN): This doesn't handle constraints that require non-intersection, and it also prefers 1d arrangements over 3d ones
+  let delta = Vec3.create();
+  let minIntersectSeparation = 0.04;
+  const constraintIterationCount = 100;
+  let resolved;
+  for (let j = 0; j < constraintIterationCount; j++) {
+    resolved = true;
+    for (let cond of intersectConds) {
+      let pos1 = oven.currRuleSymbolMap[cond.entitySymbolA].pos;
+      let pos2 = oven.currRuleSymbolMap[cond.entitySymbolB].pos;
+      Vec3.sub(/*out*/delta, pos2, pos1);
+      let deltaLength = Vec3.len(delta);
+      if (deltaLength > minIntersectSeparation) {
+        let scaledDiff = (deltaLength-minIntersectSeparation)/deltaLength * 0.5;
+        Vec3.scaleAndAdd(/*out*/pos1, pos1, delta, scaledDiff);
+        Vec3.scaleAndAdd(/*out*/pos2, pos2, delta, -scaledDiff);
+        resolved = false;
+      }
     }
+    if (resolved) {
+      break;
+    }
+  }
+  if (!resolved) {
+    console.error(`Unable to satisfy constraints for conditions! ${JSON.stringify(conditions)}`);
   }
 }
 
@@ -562,27 +590,6 @@ function gizmoFlagsForEntityGivenController (entity: IEntity, sourceList : IEnti
 
 }
 
-// function makeEmptyRuleForConditions (state: IState, conditions: ICondition[]) : IRule {
-//   let entitiesList = makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot);
-//   let offset = 0;
-//   for (let cond of conditions) {
-//     switch (cond.type) {
-//       // TODO(JULIAN): Handle intersection!!!
-//       case CONDITION_TYPE.PRESENT:
-//         entitiesList.entities.push(makeEntity( Vec3.fromValues(0,0.9+(offset+=0.3),0)
-//                                              , Quat.create()
-//                                              , Vec3.clone(UNIT_VECTOR3)
-//                                              , new Uint8Array([0xFF,0x00,0x00,0xEE])
-//                                              , (<IConditionPresent>cond).entity.type));
-//     }
-//   }
-//   return {
-//     conditions: conditions
-//   , actions: []
-//   , entities: entitiesList
-//   };
-// }
-
 function conditionExistsInConditions (condition: ICondition, conditions: ICondition[]) : boolean {
   for (let testcond of conditions) {
     if (conditionsEqual(testcond, condition)) {
@@ -629,6 +636,7 @@ function unordered2EntityIdentifierHash (entityAIdentifier : IEntityIdentifier, 
 }
 
 function doesRuleApplyToEntityConfiguration (rule : IRule, entities : IEntity[]) : boolean {
+  // TODO(JULIAN): Rewrite using symbols instead of pure inference (should be simpler)
   //TODO(JULIAN): Ensure that this works for interesting intersection cases (since we're ignoring entity refs)
   let requiredPresent = new Map<MODEL_TYPE,number>();
   let requiredIntersect = new Map<ICollisionHash,number>();
@@ -788,29 +796,6 @@ function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
   };
 }
 
-
-// function makeControllerMetadataFromEntityAndController (entity : IEntity, controller : IController) : IControllerMetadata {
-//   const offsetPos : IVector3 = Vec3.create();
-//   const offsetRot : IQuaternion = Quat.create();
-//   Vec3.transformQuat(/*out*/offsetPos
-//                     , Vec3.sub(/*out*/offsetPos
-//                               , entity.pos, controller.pos)
-//                     , Quat.invert(/*out*/offsetRot
-//                                     , controller.rot));
-
-//   Quat.mul(/*out*/offsetRot
-//           , Quat.invert(/*out*/offsetRot
-//                        , controller.rot), entity.rot);
-
-//   return {
-//     controller: controller
-//   , startPos: Vec3.clone(entity.pos)
-//   , startRot: Quat.clone(entity.rot)
-//   , offsetPos: offsetPos
-//   , offsetRot: offsetRot
-//   };
-// }
-
 function makeControllerMetadataFromEntityInEntityListAndController (entity : IEntity, entitiesList : IEntityList, controller : IController) : IControllerMetadata {
   const controllerPos = Vec3.create();
   const controllerRot = Quat.create();
@@ -923,7 +908,7 @@ function getInitialState () : IState {
     , simulationTime: 0
     , simulating: SIMULATION_TYPE.PAUSED
     , entities: entitiesList
-              //  ]
+    , recycleableEntities: makeEntityList(Vec3.create(), Quat.create())
     , storedEntities: makeEntityList(Vec3.create(), Quat.create())
     , models: modelsList
     , clock: clock
@@ -1141,12 +1126,12 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
       // We switched to a different rule!
       STATE.oven.actionIndex = STATE.oven.currRule.actions.length - 1;
       console.log("Switched to a different rule");
-      // TODO(JULIAN): Instead of showing and hiding, we can delete and create for the new rule...
-      showEntities(STATE.oven.currRule.entities);
-      if (STATE.oven.lastRule !== null) {
-        hideEntities(STATE.oven.lastRule.entities);
+      // NOTE(JULIAN): Now we need to make the new symbol map, create the requisite entities,
+      // and simulate the execution of the actions on the entities we created, updating the symbol map if necessary
+      projectConditionsInOven(STATE.oven.currRule.conditions, STATE.oven); // Creates entities and populates symbol map
+      for (let action of STATE.oven.currRule.actions) {
+        performActionWithSymbolMapAndEntityList(action, STATE.oven.currRuleSymbolMap, STATE.oven.currRuleEntities);
       }
-      // TODO(JULIAN): Now we need to make the new symbol map, create the requisite entities, and simulate the execution of the actions on the entities we created, updating the symbol map if necessary
     }
     // NOTE(JULIAN): Action recording is handled outside of this function, which may be a bit odd
   } else {
@@ -1154,9 +1139,7 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
     STATE.oven.currRule = null;
     STATE.oven.actionIndex = -1;
 
-    if (STATE.oven.lastRule !== null) {
-      hideEntities(STATE.oven.lastRule.entities);
-    }
+    clearOvenProjection(STATE.oven);
   }
 
   for (let type of buttonTypes) {
@@ -1170,13 +1153,7 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
-    // XXX(JULIAN): Handle this better
-    for (let cond of STATE.oven.currRule.conditions) {
-      if (cond.type === CONDITION_TYPE.PRESENT) {
-        // FIXME(JULIAN): Need to delete and recreate projected entities
-        copyEntityData(/*out*/(<IConditionPresent>cond).entity, (<IConditionPresent>cond).originalEntityCopy);
-      }
-    }
+    projectConditionsInOven(STATE.oven.currRule.conditions, STATE.oven);
     STATE.oven.currRule.actions.length = 0;
     STATE.oven.actionIndex = -1;
   }
@@ -1212,14 +1189,20 @@ function entityIsInList (entity : IEntity, entities : IEntity[]) : boolean {
   return false;
 }
 
-function performActionOnEntity (action : IAction, entity : IEntity) {
+function performActionWithSymbolMapAndEntityList (action : IAction, symbolMap : ISymbolMap, entityList: IEntityList) {
   switch (action.type) {
-    case ACTION_TYPE.MOVE_BY:
+    case ACTION_TYPE.MOVE_BY: {
+      let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
       Vec3.add(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, (<IActionMoveBy>action).posOffset, entity.rot));
       Quat.mul(entity.rot, entity.rot, (<IActionMoveBy>action).rotOffset);
-      break;
-    case ACTION_TYPE.DELETE:
+    } break;
+    case ACTION_TYPE.DELETE: {
+      let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
+      // TODO(JULIAN): remove from entitylist
       deleteEntity(entity);
+    } break;
+    case ACTION_TYPE.DUPLICATE:
+      console.log("TODO(JULIAN): Implement duplicate action!");
       break;
   }
 }
@@ -1228,54 +1211,58 @@ function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds
   const cond = rule.conditions[0];
   if (cond.type === CONDITION_TYPE.PRESENT) {
     const eIdentifier = (<IConditionPresent>cond).entityIdentifier;
-    for (let entity of entityList.entities) {
+    for (let eIndex = entityList.entities.length-1; eIndex >= 0; eIndex--) {
+      let entity = entityList.entities[eIndex];
       if (doEntityIdentifiersMatch(makeEntityIdentifier(entity), eIdentifier) && !excludeIds.has(entity.id)) {
+        let symbolMap : ISymbolMap = [];
+        symbolMap[(<IConditionPresent>cond).entitySymbol] = entity;
         for (let action of rule.actions) {
-          performActionOnEntity(action, entity);
+          performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
         }
       }
     }
   }
 }
 
-function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
-  const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
+// TODO(JULIAN): FIXME!!!
+// function performSimulationForRuleWith2Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
+//   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
 
-  const hash = unordered2EntityIdentifierHash(presentConds[0].entityIdentifier, presentConds[1].entityIdentifier);
+//   const hash = unordered2EntityIdentifierHash(presentConds[0].entityIdentifier, presentConds[1].entityIdentifier);
 
-  const entities = entityList.entities;
-  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
-    for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
-      let e1 = entities[e1Index];
-      let e2 = entities[e2Index];
-      if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
-        continue;
-      }
-      let e1Identifier = makeEntityIdentifier(e1);
-      let e2Identifier = makeEntityIdentifier(e2);
-      if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash) {
-        if (!doEntityIdentifiersMatch(e1Identifier, presentConds[0].entityIdentifier)) {
-          const temp = e1;
-          e1 = e2;
-          e2 = temp;
-        }
-        for (let action of rule.actions) {
-          switch (action.type) {
-            case ACTION_TYPE.MOVE_BY:
-            case ACTION_TYPE.DELETE:
-            // FIXME(JULIAN): IActionWithEntity will require a symbolic match instead!
-            if (makeEntityIdentifier((<IActionWithEntity>action).entity) === presentConds[0].entityIdentifier) {
-              performActionOnEntity(action, e1);
-            } else {
-              performActionOnEntity(action, e2);
-            }
-          }
-        }
-        break;
-      }
-    } 
-  }
-}
+//   const entities = entityList.entities;
+//   for (let e1Index = 0; e1Index < entities.length; e1Index++) {
+//     for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
+//       let e1 = entities[e1Index];
+//       let e2 = entities[e2Index];
+//       if (excludeIds.has(e1.id) || excludeIds.has(e2.id)) {
+//         continue;
+//       }
+//       let e1Identifier = makeEntityIdentifier(e1);
+//       let e2Identifier = makeEntityIdentifier(e2);
+//       if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash) {
+//         if (!doEntityIdentifiersMatch(e1Identifier, presentConds[0].entityIdentifier)) {
+//           const temp = e1;
+//           e1 = e2;
+//           e2 = temp;
+//         }
+//         for (let action of rule.actions) {
+//           switch (action.type) {
+//             case ACTION_TYPE.MOVE_BY:
+//             case ACTION_TYPE.DELETE:
+//             // FIXME(JULIAN): IActionWithEntity will require a symbolic match instead!
+//             if (makeEntityIdentifier((<IActionWithEntity>action).entity) === presentConds[0].entityIdentifier) {
+//               performActionWithSymbolMapAndEntityList(action, e1);
+//             } else {
+//               performActionWithSymbolMapAndEntityList(action, e2);
+//             }
+//           }
+//         }
+//         break;
+//       }
+//     } 
+//   }
+// }
 
 function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
@@ -1287,6 +1274,8 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
   }
 
   const hash = unordered2EntityIdentifierHash(intersectCond.entityIdentifierA, intersectCond.entityIdentifierB);
+
+  const matchingPairs : [IEntity,IEntity][] = [];
 
   const entities = entityList.entities;
   for (let e1Index = 0; e1Index < entities.length; e1Index++) {
@@ -1300,26 +1289,25 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
       let e2Identifier = makeEntityIdentifier(e2);
       if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash &&
           doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
-        if (!doEntityIdentifiersMatch(e1Identifier, intersectCond.entityIdentifierA)) {
-          const temp = e1;
-          e1 = e2;
-          e2 = temp;
-        }
-        for (let action of rule.actions) {
-          switch (action.type) {
-            case ACTION_TYPE.MOVE_BY:
-            case ACTION_TYPE.DELETE:
-            // FIXME(JULIAN): Need to switch to using symbol matching!
-            if (doEntityIdentifiersMatch(makeEntityIdentifier((<IActionWithEntity>action).entity), intersectCond.entityIdentifierA)) {
-              performActionOnEntity(action, e1);
-            } else {
-              performActionOnEntity(action, e2);
-            }
-          }
-        }
+        matchingPairs.push([e1,e2]);
         break;
       }
     } 
+  }
+
+  // NOTE(JULIAN): Split into a separate part so that we don't loop through the entityList while removing entries due to delete actions
+  for (let [e1,e2] of matchingPairs) {
+    let symbolMap : ISymbolMap = [];
+    if (doEntityIdentifiersMatch(makeEntityIdentifier(e1), intersectCond.entityIdentifierA)) {
+      symbolMap[intersectCond.entitySymbolA] = e1;
+      symbolMap[intersectCond.entitySymbolB] = e2;
+    } else {
+      symbolMap[intersectCond.entitySymbolA] = e2;
+      symbolMap[intersectCond.entitySymbolB] = e1;
+    }
+    for (let action of rule.actions) {
+      performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
+    }
   }
 }
 
@@ -1447,12 +1435,21 @@ function displaceAlongAxis (outPos : IVector3, axis : IVector3, startPos : IVect
   Vec3.add(/*out*/outPos, startPos, displacement);
 }
 
-function doProcessControllerInput (controllers: IController[]) : IAction[] {
+function symbolForEntityInMap (entity : IEntity, symbolMap : ISymbolMap) : IEntitySymbol {
+  for (let i : IEntitySymbol = 0; i < symbolMap.length; i++) {
+    if (symbolMap[i] === entity) {
+      return i;
+    }
+  }
+  return ENTITY_SYMBOL_NULL;
+}
+
+function doProcessControllerInput (controllers: IController[], currSymbolMap : ISymbolMap) : IAction[] {
   const newOvenActions : IAction[] = [];
   const newInProgressAlterations : IAlteration[] = [];
 
   let worldEntities = STATE.entities;
-  let ovenEntities = STATE.oven.currRule === null? makeEntityList(STATE.oven.model.pos, STATE.oven.model.rot) : STATE.oven.currRule.entities;
+  let ovenEntities = STATE.oven.currRuleEntities;
   let shelfEntities = STATE.shelf.clonableModels;
   const entityLists : IEntityList[] = [ worldEntities, ovenEntities, shelfEntities ];
 
@@ -1579,7 +1576,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
             if (usedAlteration.entitiesList === ovenEntities) {
-              newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration));
+              newOvenActions.push(makeMoveByActionFromAlteration(<IAlterationMove>usedAlteration, currSymbolMap));
             }
           } else {
             newInProgressAlterations.push(usedAlteration);
@@ -1623,7 +1620,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
             if (usedAlteration.entitiesList === ovenEntities) {
-              newOvenActions.push(makeDuplicateActionFromAlteration(<IAlterationDuplicate>usedAlteration));
+              newOvenActions.push(makeDuplicateActionFromAlteration(<IAlterationDuplicate>usedAlteration, currSymbolMap));
             }
           } else {
             newInProgressAlterations.push(usedAlteration);
@@ -1634,7 +1631,7 @@ function doProcessControllerInput (controllers: IController[]) : IAction[] {
           deleteEntity(entityToDelete);
           // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
           if (usedAlteration.entitiesList === ovenEntities) {
-            newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration));
+            newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration, currSymbolMap));
           }
         break;
       } 
@@ -1663,15 +1660,12 @@ export function stepSimulation (controllers : IController[]) {
 
   clearGizmosForEntityList(STATE.entities);
   clearGizmosForEntityList(STATE.shelf.clonableModels);
-  if (STATE.oven.currRule != null) {
-    clearGizmosForEntityList(STATE.oven.currRule.entities);
-  }
-
+  clearGizmosForEntityList(STATE.oven.currRuleEntities);
 
   doProcessClockInput(controllers);
   const objectsInOven = determineObjectsInOven();
   doProcessOvenInput(controllers, objectsInOven);
-  const newOvenActions = doProcessControllerInput(controllers); // NOTE(JULIAN): Mutates controllers
+  const newOvenActions = doProcessControllerInput(controllers, STATE.oven.currRuleSymbolMap); // NOTE(JULIAN): Mutates controllers
   if (STATE.oven.currRule != null) {
     STATE.oven.currRule.actions.push(...newOvenActions);
     STATE.oven.actionIndex += newOvenActions.length;

@@ -21,8 +21,6 @@ function countObjectsInEntityList (entityList : IEntityList) : number {
 
 export function countObjects (state: IState) : number {
   let count = countObjectsInEntityList(state.models) + countObjectsInEntityList(state.entities);
-  for (let rule of state.oven.rules) {
-    count += countObjectsInEntityList(rule.entities);
-  }
+  count += countObjectsInEntityList(state.oven.currRuleEntities);
   return count;
 }

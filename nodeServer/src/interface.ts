@@ -24,6 +24,7 @@ export interface IState {
   inProgressAlterations: IAlteration[]
 
   entities: IEntityList;
+  recycleableEntities: IEntityList;
   storedEntities: IEntityList;
   models: IEntityList;
   clock: IClock;
@@ -109,7 +110,7 @@ export interface IInputData {
 export interface IRule {
   conditions: ICondition[];
   actions: IAction[];
-  entities: IEntityList;
+  // entities: IEntityList;
 }
 
 // CONDITIONS
@@ -122,6 +123,7 @@ export interface ICondition {
   type: CONDITION_TYPE;
 }
 
+export const ENTITY_SYMBOL_NULL = -1;
 export type IEntitySymbol = number;
 
 export interface IEntityIdentifier {
@@ -130,13 +132,14 @@ export interface IEntityIdentifier {
 
 export interface IConditionPresent extends ICondition {
   entityIdentifier: IEntityIdentifier;
+  entitySymbol: IEntitySymbol;
 }
 
 export interface IConditionIntersect extends ICondition {
-  // entityA: IEntity;
-  // entityB: IEntity;
   entityIdentifierA: IEntityIdentifier;
+  entitySymbolA: IEntitySymbol;
   entityIdentifierB: IEntityIdentifier;
+  entitySymbolB: IEntitySymbol;
 }
 
 // ALTERATIONS
@@ -190,7 +193,7 @@ export interface IAction {
 
 export interface IActionWithEntity extends IAction {
   type: ACTION_TYPE;
-  entity: IEntity;
+  entitySymbol: IEntitySymbol;
 }
 
 export interface IActionMoveBy extends IActionWithEntity {

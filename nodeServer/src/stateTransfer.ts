@@ -58,8 +58,8 @@ const _sendBuffer = Buffer.allocUnsafe(131072);
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   // console.log(`SBFrom ${0}:${messageLength}`)
@@ -217,10 +217,8 @@ async function sendState (state : IState, transientState : ITransientState) {
     packEntity(promises, multiMessageDescriptor, entity);
   }
 
-  // XXX(JULIAN): Optimize this so we don't send everything all the time!
-  for (let rule of state.oven.rules) {
-    packEntityList(promises, multiMessageDescriptor, rule.entities);
-  }
+  packEntityList(promises, multiMessageDescriptor, state.oven.currRuleEntities);
+  packEntityList(promises, multiMessageDescriptor, state.recycleableEntities);
 
   let avatarStuffToSend = [];
   let controllerAttachmentDataToSend = [];
