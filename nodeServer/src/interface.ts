@@ -42,6 +42,7 @@ export interface IEntityList {
   entities: IEntity[];
   offsetPos: IVector3;
   offsetRot: IQuaternion;
+  offsetScale: IVector3; // TODO(JULIAN): handle this consistently!
   spatialHash: ISpatialHash<IEntity>;
 }
 
@@ -225,6 +226,8 @@ export interface IOven {
   currRule: IRule;
   currRuleSymbolMap: ISymbolMap;
   currRuleEntities: IEntityList;
+  currRulePreviewEntities: IEntityList;
+  currRulePreviewSimulationTime: number;
 }
 
 export interface ISymbolMap {

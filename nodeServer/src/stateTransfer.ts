@@ -114,7 +114,9 @@ function packEntityData (deferredPromises : BPromise<number>[], descriptor: IMul
   let temp = Vec3.create();
   const pos = Vec3.add(/*out*/temp
                       , offsetpos, Vec3.transformQuat(/*out*/temp
-                                                     , entity.pos, offsetrot));
+                                                     , Vec3.mul(/*out*/temp
+                                                               , entity.pos, offsetscale)
+                                                     , offsetrot));
   const scale = Vec3.mul(/*out*/Vec3.create()
                         , entity.scale, offsetscale);
 
@@ -141,9 +143,8 @@ function packEntity (deferredPromises : BPromise<number>[], descriptor: IMultiMe
 }
 
 function packEntityList (deferredPromises : BPromise<number>[], descriptor: IMultiMesageDescriptor, entityList : IEntityList) {
-  // TODO(JULIAN): Implement scale for entity lists and use it here
   for (let entity of entityList.entities) {
-      packEntityData(deferredPromises, descriptor, entityList.offsetPos, entityList.offsetRot, UNIT_VECTOR3, entity);
+      packEntityData(deferredPromises, descriptor, entityList.offsetPos, entityList.offsetRot, entityList.offsetScale, entity);
   }
 }
 
@@ -218,6 +219,7 @@ async function sendState (state : IState, transientState : ITransientState) {
   }
 
   packEntityList(promises, multiMessageDescriptor, state.oven.currRuleEntities);
+  packEntityList(promises, multiMessageDescriptor, state.oven.currRulePreviewEntities);
   packEntityList(promises, multiMessageDescriptor, state.recycleableEntities);
 
   let avatarStuffToSend = [];

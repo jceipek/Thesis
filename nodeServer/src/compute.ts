@@ -511,7 +511,7 @@ function makeEmptyRuleForEntities (entities : IEntity[], state: IState) : IRule 
 
 function clearOvenProjection (oven : IOven) {
   oven.currRuleSymbolMap.length = 0;
-  deleteAllInEntityList(oven.currRuleEntities);  
+  deleteAllInEntityList(oven.currRuleEntities); 
 }
 
 function projectConditionsInOven (conditions: ICondition[], oven: IOven) {
@@ -561,6 +561,24 @@ function projectConditionsInOven (conditions: ICondition[], oven: IOven) {
   }
   if (!resolved) {
     console.error(`Unable to satisfy constraints for conditions! ${JSON.stringify(conditions)}`);
+  }
+}
+
+function clearOvenRulePreview (oven : IOven) {
+  oven.currRulePreviewSimulationTime = 0;
+  deleteAllInEntityList(oven.currRulePreviewEntities);
+}
+
+function resetRulePreviewWithEntities (entities: IEntity[], oven : IOven) {
+  clearOvenRulePreview(oven);
+  if (entities.length > 0) {
+    let firstPos = Vec3.clone(entities[0].pos);
+    for (let entity of entities) {
+      let entityClone = cloneEntity(entity);
+      entityClone.tint[3] = 0.1;
+      Vec3.sub(entityClone.pos, entityClone.pos, firstPos);
+      oven.currRulePreviewEntities.entities.push(entityClone);
+    }
   }
 }
 
@@ -785,6 +803,8 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
   // const ovenStepForwardButtonModel = makeModel(Vec3.fromValues(-0.2758612,0.7320479,0.4061716), Quat.clone(OVEN_BUTTON_BASE_ROT), MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON);
   // buttonModels.set(MODEL_TYPE.OVEN_SINGLE_STEP_FORWARD_BUTTON, ovenStepForwardButtonModel);
   // ovenModel.children.entities.push(ovenStepForwardButtonModel);
+  let rulePreviewPos = Vec3.fromValues(.62,1.16,0); // TODO: Make rulePreview move with the oven if the oven moves
+  Vec3.add(rulePreviewPos, rulePreviewPos, pos);
 
   return { model: ovenModel
          , buttonStates: new Map<MODEL_TYPE, IButtonState>([ [MODEL_TYPE.OVEN_CANCEL_BUTTON, {curr: 0, last: 0}]
@@ -799,14 +819,18 @@ function makeOven (pos : IVector3, rot : IQuaternion) : IOven {
          , currRule: null
          , currRuleSymbolMap: []
          , currRuleEntities: makeEntityList(pos, rot)
+         , currRulePreviewEntities: makeEntityList(rulePreviewPos, rot, Vec3.fromValues(0.25,0.25,0.25)) // TODO(JULIAN): Change this to have a different scale
+         , currRulePreviewSimulationTime: 0
          };
 }
 
-function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion) : IEntityList {
+function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion, scaleOffset? : IVector3) : IEntityList {
+  scaleOffset = scaleOffset? scaleOffset : Vec3.clone(UNIT_VECTOR3);
   return {
     entities: []
   , offsetPos: posOffset 
-  , offsetRot: rotOffset 
+  , offsetRot: rotOffset
+  , offsetScale: scaleOffset
   , spatialHash: SH.make<IEntity>(CELL_SIZE, CELL_COUNT)
   };
 }
@@ -1177,16 +1201,26 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
       // NOTE(JULIAN): Now we need to make the new symbol map, create the requisite entities,
       // and simulate the execution of the actions on the entities we created, updating the symbol map if necessary
       projectConditionsInOven(STATE.oven.currRule.conditions, STATE.oven); // Creates entities and populates symbol map
+      resetRulePreviewWithEntities(objectsInOven, STATE.oven);
       for (let action of STATE.oven.currRule.actions) {
         performActionWithSymbolMapAndEntityList(action, STATE.oven.currRuleSymbolMap, STATE.oven.currRuleEntities);
       }
     }
     // NOTE(JULIAN): Action recording is handled outside of this function, which may be a bit odd
+
+    performSimulation(STATE.oven.currRulePreviewEntities, new Set<number>(), STATE.oven.rules);
+    STATE.oven.currRulePreviewSimulationTime += 1/FPS;
+    if (STATE.oven.currRulePreviewSimulationTime > 5 || STATE.oven.currRulePreviewEntities.entities.length > 15) {
+      resetRulePreviewWithEntities(objectsInOven, STATE.oven);
+      STATE.oven.currRulePreviewSimulationTime = 0;
+    }
+
   } else {
     // We're not working on any rules (because there are no objects in the oven)
     STATE.oven.currRule = null;
     STATE.oven.actionIndex = -1;
 
+    clearOvenRulePreview(STATE.oven);
     clearOvenProjection(STATE.oven);
   }
 
@@ -1201,6 +1235,7 @@ function doProcessOvenInput (controllers: IController[], objectsInOven : IEntity
 
   const cancelState = STATE.oven.buttonStates.get(MODEL_TYPE.OVEN_CANCEL_BUTTON); 
   if (cancelState.curr === 1 && cancelState.last === 0 && STATE.oven.currRule !== null) {
+    resetRulePreviewWithEntities(objectsInOven, STATE.oven);
     projectConditionsInOven(STATE.oven.currRule.conditions, STATE.oven);
     STATE.oven.currRule.actions.length = 0;
     STATE.oven.actionIndex = -1;
