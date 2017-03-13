@@ -204,6 +204,7 @@ export interface IActionMoveBy extends IActionWithEntity {
 export interface IActionDuplicate extends IActionWithEntity {
   posOffset: IVector3;
   rotOffset: IQuaternion;
+  createdEntitySymbol: IEntitySymbol;
 }
 
 export interface IActionDelete extends IActionWithEntity {

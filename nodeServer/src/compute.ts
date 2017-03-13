@@ -85,23 +85,31 @@ function recycleEntity (recycleableEntities : IEntityList) {
   return recycleableEntities.entities.pop();
 }
 
+// function logEntityMembership (task) {
+//   console.log(`[NEW MEMBERSHIPS after ${task}]`);
+//   console.log(STATE.entities.entities.map((entity) => entity.id));
+//   console.log(STATE.recycleableEntities.entities.map((entity) => entity.id));
+//   console.log(STATE.oven.currRuleEntities.entities.map((entity) => entity.id));
+//   console.log(_latestEntityId);
+//   console.log("[EOF]");
+// }
+
 export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE, forceNew? : boolean) : IEntity {
-  let recycled = forceNew? undefined : recycleEntity(STATE.recycleableEntities);
-  if (recycled !== undefined) {
-    recycled.type = type;
-    // recycled.id = entity.id; // Intentionally omitted
-    Vec3.copy(recycled.pos, pos);
-    Quat.copy(recycled.rot, rot);
-    Vec3.copy(recycled.scale, scale);
-    recycled.tint = tint;
-    recycled.visible = true;
-    deleteAllInEntityList(recycled.children);
-    recycled.interactionVolume = <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 };
-    recycled.deleted = false;
-    recycled.gizmoVisuals = GIZMO_VISUALS_FLAGS.None;
-    return recycled;
+  let res = forceNew? undefined : recycleEntity(STATE.recycleableEntities);
+  if (res !== undefined) {
+    res.type = type;
+    // res.id = entity.id; // Intentionally omitted
+    Vec3.copy(res.pos, pos);
+    Quat.copy(res.rot, rot);
+    Vec3.copy(res.scale, scale);
+    res.tint = tint;
+    res.visible = true;
+    deleteAllInEntityList(res.children);
+    res.interactionVolume = <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 };
+    res.deleted = false;
+    res.gizmoVisuals = GIZMO_VISUALS_FLAGS.None;
   } else {
-    return {
+    res = {
       type: type
     , id: _latestEntityId++
     , pos: pos
@@ -115,6 +123,7 @@ export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, t
     , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
     };
   }
+  return res;
 }
 
 function deleteEntity (entity: IEntity, entityList: IEntityList, dontRemoveOptimization?: boolean) {
@@ -143,14 +152,13 @@ function copyEntityData (out : IEntity, entity : IEntity) {
 }
 
 function cloneEntity (entity : IEntity) : IEntity {
-  let recycled = recycleEntity(STATE.recycleableEntities);
-  if (recycled !== undefined) {
-    copyEntityData(recycled, entity);
-    deleteAllInEntityList(recycled.children);
+  let res = recycleEntity(STATE.recycleableEntities);
+  if (res !== undefined) {
+    copyEntityData(/*out*/res, entity);
+    deleteAllInEntityList(res.children);
     for (let child of entity.children.entities) {
-      recycled.children.entities.push(cloneEntity(child));
+      res.children.entities.push(cloneEntity(child));
     }
-    return recycled;
   } else {
     const pos = Vec3.clone(entity.pos);
     const rot = Quat.clone(entity.rot);
@@ -158,8 +166,7 @@ function cloneEntity (entity : IEntity) : IEntity {
     for (let child of entity.children.entities) {
       children.entities.push(cloneEntity(child));
     }
-
-    return {
+    res = {
       type: entity.type
     , id: _latestEntityId++
     , pos: pos
@@ -173,14 +180,20 @@ function cloneEntity (entity : IEntity) : IEntity {
     , gizmoVisuals: entity.gizmoVisuals
     };
   }
+  return res;
 }
 
 function removeEntityFromEntityList (entity : IEntity, entityList: IEntityList) {
-  entityList.entities.splice(entityList.entities.indexOf(entity));
+  let index = entityList.entities.indexOf(entity);
+  if (index > -1) {
+    entityList.entities.splice(index, 1);
+  } else {
+    console.log(`ERROR: Trying to remove ${entity.id} even though it doesn't exist in this list`);
+  }
 }
 
 function deleteAllInEntityList (entityList : IEntityList) {
-  var entities = entityList.entities.splice(0);
+  let entities = entityList.entities.splice(0);
   for (let i = entities.length - 1; i >= 0; i--) {
     deleteEntity(entities[i], entityList, true);
   }
@@ -463,6 +476,7 @@ function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDup
 
   return <IActionDuplicate>{ type: ACTION_TYPE.DUPLICATE
                         , entitySymbol: symbolForEntityInMap(duplicateAlteration.entity, symbolMap)
+                        , createdEntitySymbol: symbolForEntityInMap(duplicateAlteration.entityCopy, symbolMap)
                         , posOffset: deltaPos
                         , rotOffset: deltaRot };
 }
@@ -864,14 +878,14 @@ function makeMoveAlteration (entity : IEntity, controller : IController, movemen
   };
 }
 
-function makeDuplicateAlteration (entity : IEntity, entityCopy : IEntity, controller : IController, entitiesList : IEntityList) : IAlterationDuplicate {
+function makeDuplicateAlteration (entity : IEntity, entityCopy : IEntity, controller : IController, sourceEntitiesList : IEntityList, destEntitiesList : IEntityList) : IAlterationDuplicate {
   return {
     type: ALTERATION_TYPE.DUPLICATE
   , valid: true
-  , entitiesList: entitiesList
+  , entitiesList: destEntitiesList
   , entity: entity
   , entityCopy: entityCopy
-  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
+  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, sourceEntitiesList, controller)
   };
 }
 
@@ -1233,10 +1247,16 @@ function performActionWithSymbolMapAndEntityList (action : IAction, symbolMap : 
     case ACTION_TYPE.DELETE: {
       let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
       deleteEntity(entity, entityList);
+      symbolMap[(<IActionMoveBy>action).entitySymbol] = undefined;
     } break;
-    case ACTION_TYPE.DUPLICATE:
-      console.log("TODO(JULIAN): Implement duplicate action!");
-      break;
+    case ACTION_TYPE.DUPLICATE: {
+      let entity = symbolMap[(<IActionDuplicate>action).entitySymbol];
+      let entityClone = cloneEntity(entity);
+      entityList.entities.push(entityClone);
+      Vec3.add(entityClone.pos, entityClone.pos, Vec3.transformQuat(_tempVec, (<IActionDuplicate>action).posOffset, entityClone.rot));
+      Quat.mul(entityClone.rot, entityClone.rot, (<IActionDuplicate>action).rotOffset);
+      symbolMap[(<IActionDuplicate>action).createdEntitySymbol] = entityClone;
+    } break;
   }
 }
 
@@ -1390,6 +1410,11 @@ function alterationThatUsesController (controller : IController, alterations : I
           return alteration;
         }
         break;
+      case ALTERATION_TYPE.DUPLICATE:
+        if ((<IAlterationDuplicate>alteration).controllerMetadata.controller === controller) {
+          return alteration;
+        }
+        break;
     }
   }
   return null;
@@ -1418,6 +1443,11 @@ function alterationsThatUseEntity (entity : IEntity, alterations : IAlteration[]
         break;
       case ALTERATION_TYPE.DELETE:
         if ((<IAlterationDelete>alteration).entity === entity) {
+          matchingAlterations.push(alteration);
+        }
+        break;
+      case ALTERATION_TYPE.DUPLICATE:
+        if ((<IAlterationDuplicate>alteration).entityCopy === entity) {
           matchingAlterations.push(alteration);
         }
         break;
@@ -1530,14 +1560,18 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
               }
             } break;
             case CONTROLLER_ATTACHMENT_TYPE.DUPLICATE: {
-              // XXX(JULIAN): Any transformations we make to a duplicated object in the oven won't work!
-              // And even duplicating an object in the oven won't work as of yet!
               let sourceEntity = closestEntity;
               let entityClone = cloneEntity(closestEntity);
-              applyOffsetToEntity(entityClone, sourceList.offsetPos, sourceList.offsetRot);
-              sourceList = worldEntities; // XXX(JULIAN): Awkward because it ignores the actual sourceList
-              worldEntities.entities.push(entityClone);
-              newInProgressAlterations.push(makeDuplicateAlteration(sourceEntity, entityClone, controller, sourceList)); // TODO(JULIAN): ensure that becoming invalid makes sense (I think it should already)
+              let destList = sourceList;
+              applyOffsetToEntity(entityClone, destList.offsetPos, destList.offsetRot);
+              if (destList === shelfEntities) {
+                destList = worldEntities;
+              }
+              if (sourceList === ovenEntities) {
+                currSymbolMap[currSymbolMap.length] = entityClone;
+              }
+              destList.entities.push(entityClone);
+              newInProgressAlterations.push(makeDuplicateAlteration(sourceEntity, entityClone, controller, sourceList, destList)); // TODO(JULIAN): ensure that becoming invalid makes sense (I think it should already)
             } break;
           }
         }
@@ -1616,7 +1650,7 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           }
         } break;
         case ALTERATION_TYPE.DUPLICATE: {
-          const entityToDuplicate = (<IAlterationDuplicate>usedAlteration).entity;
+          const duplicatedEntity = (<IAlterationDuplicate>usedAlteration).entityCopy;
           const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata;
 
           const controllerPos = _tempVec;
@@ -1647,8 +1681,8 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
 
 
           const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
-          Vec3.copy(/*out*/entityToDuplicate.pos, entityTargetPos);
-          Quat.copy(/*out*/entityToDuplicate.rot, entityTargetRot);
+          Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
+          Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
           
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
