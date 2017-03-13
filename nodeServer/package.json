@@ -10,10 +10,12 @@
   "license": "MIT",
   "dependencies": {
     "@types/bluebird": "^3.0.32",
-    "@types/gl-matrix": "^2.2.30",
+    "@types/gl-matrix": "^2.2.32",
     "@types/node": "^6.0.38",
+    "@types/sleep": "0.0.5",
     "bluebird": "^3.4.3",
-    "gl-matrix": "^2.3.2"
+    "gl-matrix": "^2.3.2",
+    "sleep": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^2.1.0-dev.20160902"

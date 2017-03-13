@@ -23,6 +23,8 @@ ExportedObj/
 *.user
 *.unityproj
 *.booproj
+*.blend1
+*.blend1.meta
 
 # ============ #
 # OS generated #
