@@ -81,28 +81,49 @@ const OVEN_BUTTON_FLIPPED_ROT = Quat.fromValues(3.596278e-17, -0.8580354, -0.517
 
 export const STATE : IState = getInitialState();
 
-// TODO(JULIAN): Modify to make this recycle deleted entities
-export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE) : IEntity {
-  return {
-    type: type
-  , id: _latestEntityId++
-  , pos: pos
-  , rot: rot
-  , scale: scale
-  , tint: tint
-  , visible: true
-  , children: makeEntityList(pos, rot)
-  , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
-  , deleted: false
-  , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
-  };
+function recycleEntity (recycleableEntities : IEntityList) {
+  return recycleableEntities.entities.pop();
 }
 
-function deleteEntity (entity: IEntity) {
-  // FIXME(JULIAN): Remove entity from entitylist!
-  // TODO(JULIAN): Truly delete the entity
+export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE, forceNew? : boolean) : IEntity {
+  let recycled = forceNew? undefined : recycleEntity(STATE.recycleableEntities);
+  if (recycled !== undefined) {
+    recycled.type = type;
+    // recycled.id = entity.id; // Intentionally omitted
+    Vec3.copy(recycled.pos, pos);
+    Quat.copy(recycled.rot, rot);
+    Vec3.copy(recycled.scale, scale);
+    recycled.tint = tint;
+    recycled.visible = true;
+    deleteAllInEntityList(recycled.children);
+    recycled.interactionVolume = <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 };
+    recycled.deleted = false;
+    recycled.gizmoVisuals = GIZMO_VISUALS_FLAGS.None;
+    return recycled;
+  } else {
+    return {
+      type: type
+    , id: _latestEntityId++
+    , pos: pos
+    , rot: rot
+    , scale: scale
+    , tint: tint
+    , visible: true
+    , children: makeEntityList(pos, rot)
+    , interactionVolume: <ISphereInteractionVolume>{ type: VOLUME_TYPE.SPHERE, radius: 0.05 }
+    , deleted: false
+    , gizmoVisuals: GIZMO_VISUALS_FLAGS.None
+    };
+  }
+}
+
+function deleteEntity (entity: IEntity, entityList: IEntityList, dontRemoveOptimization?: boolean) {
+  deleteAllInEntityList(entity.children);
   entity.deleted = true;
   STATE.recycleableEntities.entities.push(entity);
+  if (!dontRemoveOptimization) {
+    removeEntityFromEntityList(entity, entityList);
+  }
 }
 
 function copyEntityData (out : IEntity, entity : IEntity) {
@@ -111,37 +132,47 @@ function copyEntityData (out : IEntity, entity : IEntity) {
   Vec3.copy(out.pos, entity.pos);
   Quat.copy(out.rot, entity.rot);
   Vec3.copy(out.scale, entity.scale);
-  out.visible = entity.visible;
   for (let i = 0; i < entity.tint.length; i++) {
     out.tint[i] = entity.tint[i];
   }
+  out.visible = entity.visible;
+  // XXX(JULIAN): children omitted! 
   out.interactionVolume = entity.interactionVolume;
   out.deleted = entity.deleted;
   out.gizmoVisuals = entity.gizmoVisuals;
-  // XXX(JULIAN): children omitted! 
 }
 
 function cloneEntity (entity : IEntity) : IEntity {
-  const pos = Vec3.clone(entity.pos);
-  const rot = Quat.clone(entity.rot);
-  const children = makeEntityList(pos, rot);
-  for (let child of entity.children.entities) {
-    children.entities.push(cloneEntity(child));
-  }
+  let recycled = recycleEntity(STATE.recycleableEntities);
+  if (recycled !== undefined) {
+    copyEntityData(recycled, entity);
+    deleteAllInEntityList(recycled.children);
+    for (let child of entity.children.entities) {
+      recycled.children.entities.push(cloneEntity(child));
+    }
+    return recycled;
+  } else {
+    const pos = Vec3.clone(entity.pos);
+    const rot = Quat.clone(entity.rot);
+    const children = makeEntityList(pos, rot);
+    for (let child of entity.children.entities) {
+      children.entities.push(cloneEntity(child));
+    }
 
-  return {
-    type: entity.type
-  , id: _latestEntityId++
-  , pos: pos
-  , rot: rot
-  , scale: Vec3.clone(entity.scale)
-  , visible: entity.visible
-  , children: children
-  , tint: new Uint8Array(entity.tint)
-  , interactionVolume: entity.interactionVolume
-  , deleted: entity.deleted
-  , gizmoVisuals: entity.gizmoVisuals
-  };
+    return {
+      type: entity.type
+    , id: _latestEntityId++
+    , pos: pos
+    , rot: rot
+    , scale: Vec3.clone(entity.scale)
+    , visible: entity.visible
+    , children: children
+    , tint: new Uint8Array(entity.tint)
+    , interactionVolume: entity.interactionVolume
+    , deleted: entity.deleted
+    , gizmoVisuals: entity.gizmoVisuals
+    };
+  }
 }
 
 function removeEntityFromEntityList (entity : IEntity, entityList: IEntityList) {
@@ -151,7 +182,7 @@ function removeEntityFromEntityList (entity : IEntity, entityList: IEntityList) 
 function deleteAllInEntityList (entityList : IEntityList) {
   var entities = entityList.entities.splice(0);
   for (let i = entities.length - 1; i >= 0; i--) {
-    deleteEntity(entities[i]);
+    deleteEntity(entities[i], entityList, true);
   }
 }
 
@@ -773,20 +804,20 @@ function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
   let pedestalX = 0.7305;
   const spherePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
   shelfModel.children.entities.push(spherePedestal);
-  const sphereModel = makeEntity(Vec3.fromValues(spherePedestal.pos[0], spherePedestal.pos[1] + 0.1762, spherePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE);
+  const sphereModel = makeEntity(Vec3.fromValues(spherePedestal.pos[0], spherePedestal.pos[1] + 0.1762, spherePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE, /*ForceNew*/true);
   shelfModel.children.entities.push(sphereModel);
   clonableModels.entities.push(sphereModel);
 
 
   const cubePedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
   shelfModel.children.entities.push(cubePedestal);
-  const cubeModel = makeEntity(Vec3.fromValues(cubePedestal.pos[0], cubePedestal.pos[1] + 0.1762, cubePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE);
+  const cubeModel = makeEntity(Vec3.fromValues(cubePedestal.pos[0], cubePedestal.pos[1] + 0.1762, cubePedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE, /*ForceNew*/true);
   shelfModel.children.entities.push(cubeModel);
   clonableModels.entities.push(cubeModel);
 
   const cylinderPedestal = makeModel(Vec3.fromValues(pedestalX -= 0.269,0.0778,0), Quat.fromValues(-0.7071068,0,0,0.7071068), MODEL_TYPE.PEDESTAL);
   shelfModel.children.entities.push(cylinderPedestal);
-  const cylinderModel = makeEntity(Vec3.fromValues(cylinderPedestal.pos[0], cylinderPedestal.pos[1] + 0.1762, cylinderPedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER);
+  const cylinderModel = makeEntity(Vec3.fromValues(cylinderPedestal.pos[0], cylinderPedestal.pos[1] + 0.1762, cylinderPedestal.pos[2]), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER, /*ForceNew*/true);
   shelfModel.children.entities.push(cylinderModel);
   clonableModels.entities.push(cylinderModel);
 
@@ -854,6 +885,7 @@ function makeDeleteAlteration (entity : IEntity, controller : IController, entit
   };
 }
 
+// TODO(JULIAN): Rethink saving and restoring (we don't need clones with different ids)
 function saveEntitiesToStoredEntities (state : IState) {
   state.storedEntities.entities.length = 0;
   for (let entity of state.entities.entities) {
@@ -861,6 +893,7 @@ function saveEntitiesToStoredEntities (state : IState) {
   }
 }
 
+// TODO(JULIAN): Rethink saving and restoring
 function restoreEntitiesFromStoredEntities (state : IState) {
   const oldEntityIds = new Set();
   for (let entity of state.entities.entities) {
@@ -871,9 +904,10 @@ function restoreEntitiesFromStoredEntities (state : IState) {
       oldEntityIds.delete(entity.id);
     }
   }
-  for (let entity of state.entities.entities) {
+  for (let eIndex = state.entities.entities.length - 1; eIndex >= 0; eIndex--) {
+    let entity = state.entities.entities[eIndex];
     if (oldEntityIds.has(entity.id)) {
-      deleteEntity(entity);
+      deleteEntity(entity, state.entities);
       state.storedEntities.entities.push(entity);
     }
   }
@@ -1198,8 +1232,7 @@ function performActionWithSymbolMapAndEntityList (action : IAction, symbolMap : 
     } break;
     case ACTION_TYPE.DELETE: {
       let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
-      // TODO(JULIAN): remove from entitylist
-      deleteEntity(entity);
+      deleteEntity(entity, entityList);
     } break;
     case ACTION_TYPE.DUPLICATE:
       console.log("TODO(JULIAN): Implement duplicate action!");
@@ -1250,7 +1283,7 @@ function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds
 //           switch (action.type) {
 //             case ACTION_TYPE.MOVE_BY:
 //             case ACTION_TYPE.DELETE:
-//             // FIXME(JULIAN): IActionWithEntity will require a symbolic match instead!
+//             // FIXME(JULIAN): IActionWithEntity will require a symbolic match instead! Also, ensure that deletion doesn't change the entity list as we loop
 //             if (makeEntityIdentifier((<IActionWithEntity>action).entity) === presentConds[0].entityIdentifier) {
 //               performActionWithSymbolMapAndEntityList(action, e1);
 //             } else {
@@ -1626,14 +1659,14 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
             newInProgressAlterations.push(usedAlteration);
           }
         } break;
-        case ALTERATION_TYPE.DELETE:
+        case ALTERATION_TYPE.DELETE: {
           const entityToDelete = (<IAlterationDelete>usedAlteration).entity;
-          deleteEntity(entityToDelete);
+          deleteEntity(entityToDelete, usedAlteration.entitiesList);
           // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
           if (usedAlteration.entitiesList === ovenEntities) {
             newOvenActions.push(makeDeleteActionFromAlteration(<IAlterationDelete>usedAlteration, currSymbolMap));
           }
-        break;
+        } break;
       } 
     }
   }
