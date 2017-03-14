@@ -235,6 +235,8 @@ export interface ISymbolMap {
   length: number;
 }
 
+export type ICollisionMap = Map<IEntity, Set<IEntity>>;
+
 export interface IShelf {
   model: IEntity;
   clonableModels: IEntityList;

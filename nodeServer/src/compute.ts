@@ -29,6 +29,7 @@ import {
 , ENTITY_SYMBOL_NULL
 , IEntitySymbol
 , ISymbolMap
+, ICollisionMap
 , IEntityIdentifier
 , ICondition
 , IConditionPresent
@@ -1295,18 +1296,39 @@ function performActionWithSymbolMapAndEntityList (action : IAction, symbolMap : 
   }
 }
 
-function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
+function doesEntityHaveNoCollisions (entity: IEntity, collisionMap: ICollisionMap) {
+  return (!collisionMap.has(entity) || collisionMap.get(entity).size === 0);
+}
+
+function performAllActionsWithSymbolMapAndEntityList (actions : IAction[], symbolMap : ISymbolMap, entityList: IEntityList, excludeIds: Set<number>, collisionMap: ICollisionMap) {
+  let additions = [];
+  let deletions = [];
+  for (let action of actions) {
+    if (action.type === ACTION_TYPE.DELETE) {
+        deletions.push(symbolMap[(<IActionDelete>action).entitySymbol]);
+    }
+    performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
+    if (action.type === ACTION_TYPE.DUPLICATE) {
+        additions.push(symbolMap[(<IActionDuplicate>action).createdEntitySymbol]);
+    }
+  }
+  updateCollisionMapWithAdditionsAndDeletionsSlow(additions, deletions, entityList, excludeIds, collisionMap);
+}
+
+function performSimulationForRuleWith1Cond (collisionMap: ICollisionMap, entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
   const cond = rule.conditions[0];
   if (cond.type === CONDITION_TYPE.PRESENT) {
-    const eIdentifier = (<IConditionPresent>cond).entityIdentifier;
+    let presentCond = <IConditionPresent>cond;
+    const eIdentifier = presentCond.entityIdentifier;
     for (let eIndex = entityList.entities.length-1; eIndex >= 0; eIndex--) {
       let entity = entityList.entities[eIndex];
-      if (doEntityIdentifiersMatch(makeEntityIdentifier(entity), eIdentifier) && !excludeIds.has(entity.id)) {
+      if (excludeIds.has(entity.id)) {
+        continue;
+      }
+      if (doEntityIdentifiersMatch(makeEntityIdentifier(entity), eIdentifier) && doesEntityHaveNoCollisions(entity, collisionMap)) {
         let symbolMap : ISymbolMap = [];
-        symbolMap[(<IConditionPresent>cond).entitySymbol] = entity;
-        for (let action of rule.actions) {
-          performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
-        }
+        symbolMap[presentCond.entitySymbol] = entity;
+        performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList, excludeIds, collisionMap);
       }
     }
   }
@@ -1352,7 +1374,7 @@ function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds
 //   }
 // }
 
-function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
+function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule, collisionMap: ICollisionMap) {
   const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
 
@@ -1393,19 +1415,82 @@ function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds
       symbolMap[intersectCond.entitySymbolA] = e2;
       symbolMap[intersectCond.entitySymbolB] = e1;
     }
-    for (let action of rule.actions) {
-      performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
+    performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList, excludeIds, collisionMap);
+  }
+}
+
+function addCollisionEntryToCollisionMap(from : IEntity, to : IEntity, collisionMap : ICollisionMap) {
+  if (!collisionMap.has(from)) {
+    collisionMap.set(from, new Set<IEntity>());
+  }
+  collisionMap.get(from).add(to);
+}
+
+function determineCollisionsSlow (entityList : IEntityList, excludeIds : Set<number>) : ICollisionMap {
+  let collisionMap : ICollisionMap = new Map<IEntity, Set<IEntity>>();
+  const entities = entityList.entities;
+  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
+    let e1 = entities[e1Index];
+    if (excludeIds.has(e1.id)) {
+      continue;
+    }
+    for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
+      let e2 = entities[e2Index];
+      // TODO(Julian): get rid of excludeIds and just make sure they aren't in the same entity list
+      if (!excludeIds.has(e2.id) && doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
+        addCollisionEntryToCollisionMap(e1, e2, collisionMap);
+        addCollisionEntryToCollisionMap(e2, e1, collisionMap);
+      }
+    }
+  }
+  return collisionMap;
+}
+
+function _updateCollisionMapWithDeletions (deleted: IEntity[], collisionMap : ICollisionMap) {
+  for (let toDelete of deleted) {
+    if (collisionMap.has(toDelete)) {
+      // For every entity in this entry, delete toDelete from the matching set
+      let collSet = collisionMap.get(toDelete);
+      for (let collEntity of collSet) {
+        if (collisionMap.has(collEntity)) {
+          collisionMap.get(collEntity).delete(toDelete);
+        }
+      }
+      // Finally, delete the entry in the map
+      collisionMap.delete(toDelete);
     }
   }
 }
 
+function _updateCollisionMapWithAdditionsSlow (additions: IEntity[], entityList : IEntityList, excludeIds : Set<number>, collisionMap : ICollisionMap) {
+  for (let toAdd of additions) {
+    if (toAdd.deleted) {
+      continue;
+    }
+    for (let entity of entityList.entities) {
+      if (toAdd !== entity && !excludeIds.has(entity.id) &&
+          doVolumesOverlap(toAdd.pos, toAdd.interactionVolume, entity.pos, entity.interactionVolume)) {
+        addCollisionEntryToCollisionMap(toAdd, entity, collisionMap);
+        addCollisionEntryToCollisionMap(entity, toAdd, collisionMap);
+      }
+    }
+  }
+}
+
+function updateCollisionMapWithAdditionsAndDeletionsSlow (additions: IEntity[], deletions: IEntity[], entityList : IEntityList, excludeIds : Set<number>, collisionMap : ICollisionMap) {
+  // Delete first, then add
+  _updateCollisionMapWithDeletions(deletions, collisionMap);
+  _updateCollisionMapWithAdditionsSlow(additions, entityList, excludeIds, collisionMap);
+}
+
 function performSimulation (entityList : IEntityList, excludeIds : Set<number>, rules : IRule[]) {
+  let collisionMap = determineCollisionsSlow(entityList, excludeIds);
   for (let rule of rules) {
     if (rule.actions.length == 0) {
       continue; // Short circuit checking
     }
     if (rule.conditions.length === 1) {
-      performSimulationForRuleWith1Cond(entityList, excludeIds, rule);
+      performSimulationForRuleWith1Cond(collisionMap, entityList, excludeIds, rule);
     } else if (rule.conditions.length === 2) {
       //performSimulationForRuleWith2Cond(entityList, excludeIds, rule);
     } else if (rule.conditions.length === 3) {
