@@ -575,7 +575,7 @@ function resetRulePreviewWithEntities (entities: IEntity[], oven : IOven) {
     let firstPos = Vec3.clone(entities[0].pos);
     for (let entity of entities) {
       let entityClone = cloneEntity(entity);
-      entityClone.tint[3] = 0.1;
+      entityClone.tint[3] = 100;
       Vec3.sub(entityClone.pos, entityClone.pos, firstPos);
       oven.currRulePreviewEntities.entities.push(entityClone);
     }
