@@ -235,7 +235,9 @@ export interface ISymbolMap {
   length: number;
 }
 
+export type ICollisionHash = number;
 export type ICollisionMap = Map<IEntity, Set<IEntity>>;
+export type ICollisionHashToMatchesMap = Map<ICollisionHash, (IEntity[])[]>;
 
 export interface IShelf {
   model: IEntity;

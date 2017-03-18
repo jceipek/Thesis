@@ -30,6 +30,8 @@ import {
 , IEntitySymbol
 , ISymbolMap
 , ICollisionMap
+, ICollisionHash
+, ICollisionHashToMatchesMap
 , IEntityIdentifier
 , ICondition
 , IConditionPresent
@@ -685,7 +687,13 @@ function getIndexOfConditionsInRules (conditions: ICondition[], rules: IRule[]) 
   return -1;
 }
 
-type ICollisionHash = number;
+function entityIdentifierHash (entityIdentifier : IEntityIdentifier) : ICollisionHash {
+  return entityIdentifier.type;
+}
+
+function entityIdentifierHashFromEntity (entity : IEntity) : ICollisionHash {
+  return entity.type;
+}
 
 function unordered2EntityIdentifierHash (entityAIdentifier : IEntityIdentifier, entityBIdentifier : IEntityIdentifier) : ICollisionHash {
   let min, max;
@@ -697,6 +705,33 @@ function unordered2EntityIdentifierHash (entityAIdentifier : IEntityIdentifier, 
     max = entityAIdentifier.type;
   }
   return ((max << 16) ^ min);
+}
+
+function unordered2EntityIdentifierHashFromEntities (entityA : IEntity, entityB : IEntity) : ICollisionHash {
+  let min, max;
+  if (entityA.type < entityB.type) {
+    min = entityA.type;
+    max = entityB.type;
+  } else {
+    min = entityB.type;
+    max = entityA.type;
+  }
+  return ((max << 16) ^ min);
+}
+
+function arrangeEntitiesByIdentifier (entityA : IEntity, entityB : IEntity) : IEntity[] {
+  let min, max;
+  if (entityA.type < entityB.type) {
+    return [entityA,entityB];
+  } else {
+    return [entityB,entityA];
+  }
+}
+
+function sortPresentConditionsByIdentifier (conds : IConditionPresent[]) {
+  conds.sort((a : IConditionPresent, b : IConditionPresent) => {
+    return a.entityIdentifier.type > b.entityIdentifier.type? 1 : 0;
+  }) // Smallest to biggest
 }
 
 function doesRuleApplyToEntityConfiguration (rule : IRule, entities : IEntity[]) : boolean {
@@ -1300,35 +1335,32 @@ function doesEntityHaveNoCollisions (entity: IEntity, collisionMap: ICollisionMa
   return (!collisionMap.has(entity) || collisionMap.get(entity).size === 0);
 }
 
-function performAllActionsWithSymbolMapAndEntityList (actions : IAction[], symbolMap : ISymbolMap, entityList: IEntityList, excludeIds: Set<number>, collisionMap: ICollisionMap) {
-  let additions = [];
-  let deletions = [];
+function performAllActionsWithSymbolMapAndEntityList (actions : IAction[], symbolMap : ISymbolMap, entityList: IEntityList) {
+  // let additions = [];
+  // let deletions = [];
   for (let action of actions) {
-    if (action.type === ACTION_TYPE.DELETE) {
-        deletions.push(symbolMap[(<IActionDelete>action).entitySymbol]);
-    }
+    // if (action.type === ACTION_TYPE.DELETE) {
+    //     deletions.push(symbolMap[(<IActionDelete>action).entitySymbol]);
+    // }
     performActionWithSymbolMapAndEntityList(action, symbolMap, entityList);
-    if (action.type === ACTION_TYPE.DUPLICATE) {
-        additions.push(symbolMap[(<IActionDuplicate>action).createdEntitySymbol]);
-    }
+    // if (action.type === ACTION_TYPE.DUPLICATE) {
+    //     additions.push(symbolMap[(<IActionDuplicate>action).createdEntitySymbol]);
+    // }
   }
-  updateCollisionMapWithAdditionsAndDeletionsSlow(additions, deletions, entityList, excludeIds, collisionMap);
+  // updateCollisionMapWithAdditionsAndDeletionsSlow(additions, deletions, entityList, excludeIds, collisionMap);
 }
 
-function performSimulationForRuleWith1Cond (collisionMap: ICollisionMap, entityList : IEntityList, excludeIds : Set<number>, rule : IRule) {
+function performSimulationForRuleWith1Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule, collisionHashToMatchesMap: ICollisionHashToMatchesMap) {
   const cond = rule.conditions[0];
   if (cond.type === CONDITION_TYPE.PRESENT) {
     let presentCond = <IConditionPresent>cond;
-    const eIdentifier = presentCond.entityIdentifier;
-    for (let eIndex = entityList.entities.length-1; eIndex >= 0; eIndex--) {
-      let entity = entityList.entities[eIndex];
-      if (excludeIds.has(entity.id)) {
-        continue;
-      }
-      if (doEntityIdentifiersMatch(makeEntityIdentifier(entity), eIdentifier) && doesEntityHaveNoCollisions(entity, collisionMap)) {
+    let allMatches = collisionHashToMatchesMap.get(entityIdentifierHash(presentCond.entityIdentifier));
+    allMatches = allMatches? allMatches : [];
+    for (let [entity] of allMatches) {
+      if (!excludeIds.has(entity.id) && !entity.deleted && entity.visible) { // TODO(JULIAN): Remove excludeIds
         let symbolMap : ISymbolMap = [];
         symbolMap[presentCond.entitySymbol] = entity;
-        performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList, excludeIds, collisionMap);
+        performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList);
       }
     }
   }
@@ -1374,48 +1406,37 @@ function performSimulationForRuleWith1Cond (collisionMap: ICollisionMap, entityL
 //   }
 // }
 
-function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule, collisionMap: ICollisionMap) {
+function performSimulationForRuleWith3Cond (entityList : IEntityList, excludeIds : Set<number>, rule : IRule, collisionHashToMatchesMap: ICollisionHashToMatchesMap) {
   const intersectCond : IConditionIntersect = <IConditionIntersect>rule.conditions.find((cond) => (cond.type === CONDITION_TYPE.INTERSECT));
   const presentConds : IConditionPresent[] = <IConditionPresent[]>rule.conditions.filter((cond) => (cond.type === CONDITION_TYPE.PRESENT));
+  sortPresentConditionsByIdentifier(presentConds);
 
   if (intersectCond === undefined || presentConds.length !== 2) {
     // TODO(JULIAN): XXX(JULIAN): Handle 3 objects present instead of just 2 intersecting
     return;
   }
 
-  const hash = unordered2EntityIdentifierHash(intersectCond.entityIdentifierA, intersectCond.entityIdentifierB);
-
-  const matchingPairs : [IEntity,IEntity][] = [];
-
-  const entities = entityList.entities;
-  for (let e1Index = 0; e1Index < entities.length; e1Index++) {
-    for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
-      let e1 = entities[e1Index];
-      let e2 = entities[e2Index];
-      if (excludeIds.has(e1.id) || excludeIds.has(e2.id) || (e1.deleted) || (e2.deleted) || (!e1.visible) || (!e2.visible)) {
-        continue;
-      }
-      let e1Identifier = makeEntityIdentifier(e1);
-      let e2Identifier = makeEntityIdentifier(e2);
-      if (unordered2EntityIdentifierHash(e1Identifier, e2Identifier) === hash &&
-          doVolumesOverlap(e1.pos, e1.interactionVolume, e2.pos, e2.interactionVolume)) {
-        matchingPairs.push([e1,e2]);
-        break;
-      }
-    } 
+  let symbol1 = presentConds[0].entitySymbol;
+  let symbol2 = presentConds[1].entitySymbol;
+  // TODO(JULIAN): XXX(JULIAN): Handle this without needing to know the appropriate entityIdentifier order here
+  if (presentConds[0].entityIdentifier.type > presentConds[1].entityIdentifier.type) {
+    const temp = symbol1;
+    symbol1 = symbol2;
+    symbol2 = temp;
   }
 
-  // NOTE(JULIAN): Split into a separate part so that we don't loop through the entityList while removing entries due to delete actions
-  for (let [e1,e2] of matchingPairs) {
-    let symbolMap : ISymbolMap = [];
-    if (doEntityIdentifiersMatch(makeEntityIdentifier(e1), intersectCond.entityIdentifierA)) {
-      symbolMap[intersectCond.entitySymbolA] = e1;
-      symbolMap[intersectCond.entitySymbolB] = e2;
-    } else {
-      symbolMap[intersectCond.entitySymbolA] = e2;
-      symbolMap[intersectCond.entitySymbolB] = e1;
+  const hash = unordered2EntityIdentifierHash(intersectCond.entityIdentifierA, intersectCond.entityIdentifierB);
+  let matches = collisionHashToMatchesMap.get(hash);
+  matches = matches? matches : [];
+  for (let [e1, e2] of matches) {
+    // TODO(JULIAN): Remove excludeIds
+    if (excludeIds.has(e1.id) || excludeIds.has(e2.id) || (e1.deleted) || (e2.deleted) || (!e1.visible) || (!e2.visible)) {
+      continue;
     }
-    performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList, excludeIds, collisionMap);
+    let symbolMap : ISymbolMap = [];
+    symbolMap[symbol1] = e1;
+    symbolMap[symbol2] = e2;
+    performAllActionsWithSymbolMapAndEntityList(rule.actions, symbolMap, entityList);
   }
 }
 
@@ -1434,6 +1455,9 @@ function determineCollisionsSlow (entityList : IEntityList, excludeIds : Set<num
     if (excludeIds.has(e1.id)) {
       continue;
     }
+    if (!collisionMap.has(e1)) {
+      collisionMap.set(e1, new Set<IEntity>());
+    }
     for (let e2Index = e1Index + 1; e2Index < entities.length; e2Index++) {
       let e2 = entities[e2Index];
       // TODO(Julian): get rid of excludeIds and just make sure they aren't in the same entity list
@@ -1443,7 +1467,65 @@ function determineCollisionsSlow (entityList : IEntityList, excludeIds : Set<num
       }
     }
   }
+
   return collisionMap;
+}
+
+function collisionHashToMatchesMapFromCollisionMap (collisionMap : ICollisionMap) : ICollisionHashToMatchesMap {
+  let REQUIRE_UNIQUE = false;
+
+  if (!REQUIRE_UNIQUE) {
+    let collisionHashToMatchesMap: ICollisionHashToMatchesMap = new Map<ICollisionHash, (IEntity[])[]>();
+    for (let [entity,colSet] of collisionMap) {
+      // TYPE MATCH:    
+      let entityIdentifierHash = entityIdentifierHashFromEntity(entity);
+      if (!collisionHashToMatchesMap.has(entityIdentifierHash)) {
+        collisionHashToMatchesMap.set(entityIdentifierHash, []);
+      }
+      collisionHashToMatchesMap.get(entityIdentifierHash).push([entity]);
+
+      // TYPE COLLISION:
+      if (colSet.size > 0) {
+        for (let colEntity of colSet) {
+          let colliding = collisionMap.get(colEntity);
+
+          let entityIdentifierHash = unordered2EntityIdentifierHashFromEntities(entity, colEntity);
+          if (!collisionHashToMatchesMap.has(entityIdentifierHash)) {
+            collisionHashToMatchesMap.set(entityIdentifierHash, []);
+          }
+          collisionHashToMatchesMap.get(entityIdentifierHash).push(arrangeEntitiesByIdentifier(entity, colEntity));
+          colliding.delete(entity); // Ensures that the other entity doesn't double count this occurence.
+        }
+      }
+    }
+    return collisionHashToMatchesMap;
+  }
+
+  let uniqueCollisions: ICollisionHashToMatchesMap = new Map<ICollisionHash, (IEntity[])[]>();
+  for (let [entity,colSet] of collisionMap) {
+    if (colSet.size === 0) {
+      let entityIdentifierHash = entityIdentifierHashFromEntity(entity);
+      if (!uniqueCollisions.has(entityIdentifierHash)) {
+        uniqueCollisions.set(entityIdentifierHash, []);
+      }
+      uniqueCollisions.get(entityIdentifierHash).push([entity]);
+    } else if (colSet.size === 1) {
+      for (let colEntity of colSet) {
+        let colliding = collisionMap.get(colEntity);
+        if (colliding.size === 1) {
+          let entityIdentifierHash = unordered2EntityIdentifierHashFromEntities(entity, colEntity);
+          if (!uniqueCollisions.has(entityIdentifierHash)) {
+            uniqueCollisions.set(entityIdentifierHash, []);
+          }
+          uniqueCollisions.get(entityIdentifierHash).push(arrangeEntitiesByIdentifier(entity, colEntity));
+          colSet.clear();// Ensures that the other entity doesn't double count it.
+                         // Since we just checked the colSet, it won't show up as of size === 0 either
+          break;
+        }
+      }
+    }
+  }
+  return uniqueCollisions;
 }
 
 function _updateCollisionMapWithDeletions (deleted: IEntity[], collisionMap : ICollisionMap) {
@@ -1485,16 +1567,17 @@ function updateCollisionMapWithAdditionsAndDeletionsSlow (additions: IEntity[], 
 
 function performSimulation (entityList : IEntityList, excludeIds : Set<number>, rules : IRule[]) {
   let collisionMap = determineCollisionsSlow(entityList, excludeIds);
+  let collisionHashToMatchesMap = collisionHashToMatchesMapFromCollisionMap(collisionMap);
   for (let rule of rules) {
     if (rule.actions.length == 0) {
       continue; // Short circuit checking
     }
-    if (rule.conditions.length === 1) {
-      performSimulationForRuleWith1Cond(collisionMap, entityList, excludeIds, rule);
+    if (rule.conditions.length === 3) {
+      performSimulationForRuleWith3Cond(entityList, excludeIds, rule, collisionHashToMatchesMap);
     } else if (rule.conditions.length === 2) {
       //performSimulationForRuleWith2Cond(entityList, excludeIds, rule);
-    } else if (rule.conditions.length === 3) {
-      performSimulationForRuleWith3Cond(entityList, excludeIds, rule);
+    } else if (rule.conditions.length === 1) {
+      performSimulationForRuleWith1Cond(entityList, excludeIds, rule, collisionHashToMatchesMap);
     } else {
       console.log(`Unable to handle rule with ${rule.conditions.length} conditions!`);
     }
