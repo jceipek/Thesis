@@ -575,7 +575,7 @@ function resetRulePreviewWithEntities (entities: IEntity[], oven : IOven) {
     let firstPos = Vec3.clone(entities[0].pos);
     for (let entity of entities) {
       let entityClone = cloneEntity(entity);
-      entityClone.tint[3] = 0.1;
+      entityClone.tint[3] = 100;
       Vec3.sub(entityClone.pos, entityClone.pos, firstPos);
       oven.currRulePreviewEntities.entities.push(entityClone);
     }
@@ -1276,16 +1276,28 @@ function performActionWithSymbolMapAndEntityList (action : IAction, symbolMap : 
   switch (action.type) {
     case ACTION_TYPE.MOVE_BY: {
       let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
+      if (entity.deleted) {
+        console.log(`Would have attempted move by for ${(<IActionMoveBy>action).entitySymbol}`);
+        break;
+      }
       Vec3.add(entity.pos, entity.pos, Vec3.transformQuat(_tempVec, (<IActionMoveBy>action).posOffset, entity.rot));
       Quat.mul(entity.rot, entity.rot, (<IActionMoveBy>action).rotOffset);
     } break;
     case ACTION_TYPE.DELETE: {
-      let entity = symbolMap[(<IActionMoveBy>action).entitySymbol];
+      let entity = symbolMap[(<IActionDelete>action).entitySymbol];
+      if (entity.deleted) {
+        console.log(`Would have attempted deleted for ${(<IActionDelete>action).entitySymbol}`);
+        break;
+      }
       deleteEntity(entity, entityList);
       symbolMap[(<IActionMoveBy>action).entitySymbol] = undefined;
     } break;
     case ACTION_TYPE.DUPLICATE: {
       let entity = symbolMap[(<IActionDuplicate>action).entitySymbol];
+      if (entity.deleted) {
+        console.log(`Would have attempted duplicate for ${(<IActionDuplicate>action).entitySymbol}`);
+        break;
+      }
       let entityClone = cloneEntity(entity);
       entityList.entities.push(entityClone);
       Vec3.add(entityClone.pos, entityClone.pos, Vec3.transformQuat(_tempVec, (<IActionDuplicate>action).posOffset, entityClone.rot));
