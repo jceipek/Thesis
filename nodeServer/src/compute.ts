@@ -868,7 +868,9 @@ function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
 function makeControllerMetadataFromEntityInEntityListAndController (entity : IEntity, entitiesList : IEntityList, controller : IController) : IControllerMetadata {
   const controllerPos = Vec3.create();
   const controllerRot = Quat.create();
-  applyInverseOffsetToPosRot(controllerPos, controllerRot, controller.pos, controller.rot, entitiesList.offsetPos, entitiesList.offsetRot);
+  applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
+                            , controller.pos, controller.rot
+                            , entitiesList.offsetPos, entitiesList.offsetRot);
   
   const offsetPos : IVector3 = Vec3.create();
   const offsetRot : IQuaternion = Quat.create();
@@ -886,6 +888,7 @@ function makeControllerMetadataFromEntityInEntityListAndController (entity : IEn
     controller: controller
   , entityStartPos: Vec3.clone(entity.pos)
   , entityStartRot: Quat.clone(entity.rot)
+  , entityStartList: entitiesList
   , offsetPos: offsetPos
   , offsetRot: offsetRot
   };
@@ -965,7 +968,7 @@ function getInitialState () : IState {
     const clock = makeClock(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
     const shelf = makeShelf(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
-    const entitiesList = makeEntityList(Vec3.create(), Quat.create());
+    const entitiesList = makeEntityList(Vec3.fromValues(0,1,0), Quat.create());
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER));
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE));
@@ -1700,11 +1703,12 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           const duplicatedEntity = (<IAlterationDuplicate>usedAlteration).entityCopy;
           const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata;
 
+
           const controllerPos = _tempVec;
           const controllerRot = _tempQuat;
           applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
                                     , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
-
+          // Controller pos and rot are now in destEntityList space
           
           const entityTargetPos = Vec3.create();
           Vec3.add(/*out*/entityTargetPos
@@ -1714,22 +1718,57 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
           // offsetRot = Quat.invert(controllerRot) * entity.rot
 
-          const oldControllerRot = Quat.create();
-          const oldControllerPos = Vec3.create();
-          Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
-          Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
+          const entityStartRotInDestSpace = Quat.create();
+          const entityStartPosInDestSpace = Vec3.create();
+          // applyInverseOffsetToPosRot(/*out*/entityStartPosInDestSpace, /*out*/entityStartRotInDestSpace,
+                                    //  controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, controllerMetadata.entityStartList.offsetPos, controllerMetadata.entityStartList.offsetRot);
+          applyOffsetToPosRot(/*out*/entityStartPosInDestSpace, /*out*/entityStartRotInDestSpace
+                                    , controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
+          // Vec3.copy(/*out*/duplicatedEntity.pos, entityStartPosInDestSpace);
 
-          const oldDir = Vec3.create(); 
-          Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
-          Vec3.normalize(/*out*/oldDir, oldDir);
-          const newDir = Vec3.create(); 
-          Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
-          Vec3.normalize(/*out*/newDir, newDir);
+          // const oldControllerRot = Quat.create();
+          // const oldControllerPos = Vec3.create();
+          // Quat.invert(/*out*/oldControllerRot
+          //            , Quat.multiply(/*out*/oldControllerRot
+          //                           , controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot
+          //                                                                      , controllerMetadata.entityStartRot)));
+          // Vec3.sub(/*out*/oldControllerPos
+          //         , controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos
+          //                                                        , controllerMetadata.offsetPos, oldControllerRot));
+          // applyInverseOffsetToPosRot(/*out*/oldControllerPos, /*out*/oldControllerRot,
+          //                            controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, controllerMetadata.entityStartList.offsetPos, controllerMetadata.entityStartList.offsetRot);
+          // applyOffsetToPosRot(/*out*/oldControllerPos, /*out*/oldControllerRot
+          //                    , oldControllerPos, oldControllerRot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
+          
+          
 
+          // // const oldDir = Vec3.create(); 
+          // // Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
+          // // Vec3.normalize(/*out*/oldDir, oldDir);
+          // // const newDir = Vec3.create(); 
+          // // Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
+          // // Vec3.normalize(/*out*/newDir, newDir);
 
-          const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
-          Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
-          Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
+          // // const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
+          // // Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
+          // // Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
+          // const deltaPos = Vec3.create();
+          // Vec3.sub(/*out*/deltaPos, oldControllerPos, controllerPos);
+          // const tempRot = Quat.create();
+          // Vec3.transformQuat(/*out*/deltaPos, deltaPos, Quat.invert(/*out*/tempRot, entityStartRotInDestSpace));
+          // for (let i = 0; i < 4; i++) {
+          //   deltaPos[i] = Math.abs(deltaPos[i]);
+          // }
+
+          // // const displacementAxis = Vec3.create();
+          // if (deltaPos[0] > deltaPos[1] && deltaPos[0] > deltaPos[2]) {
+          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, X_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
+          // } else if (deltaPos[1] > deltaPos[0] && deltaPos[1] > deltaPos[2]) {
+          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, Y_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
+          // } else {
+          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, Z_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
+          // }
+          // Quat.copy(/*out*/duplicatedEntity.rot, entityStartRotInDestSpace);
           
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...

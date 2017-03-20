@@ -161,6 +161,7 @@ export interface IControllerMetadata {
   controller: IController;
   entityStartPos: IVector3;
   entityStartRot: IQuaternion;
+  entityStartList: IEntityList;
   offsetPos: IVector3;
   offsetRot: IQuaternion;
 }

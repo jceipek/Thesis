@@ -58,8 +58,8 @@ const _sendBuffer = Buffer.allocUnsafe(131072);
 const PORT = 8053;
 // const HOST = '255.255.255.255'; // Local broadcast (https://tools.ietf.org/html/rfc922)
 // const HOST = '169.254.255.255'; // Subnet broadcast
-const HOST = '192.168.1.255'; // Subnet broadcast
-// const HOST = '127.0.0.1';
+// const HOST = '192.168.1.255'; // Subnet broadcast
+const HOST = '127.0.0.1';
 
 function sendBroadcast (message : Buffer, messageLength: number, callback : (err: any, bytes: number) => void) {
   // console.log(`SBFrom ${0}:${messageLength}`)
