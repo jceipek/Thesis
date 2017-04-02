@@ -437,13 +437,22 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove, symbo
                         , rotOffset: deltaRot };
 }
 
+function getSourcePosRotInDestSpace (outSourcePosInDestSpace : IVector3, outSourceRotInDestSpace: IQuaternion, sourceList : IEntityList, destList : IEntityList, startPosInSourceSpace : IVector3, startRotInSourceSpace : IQuaternion) {
+  Vec3.copy(/*out*/outSourcePosInDestSpace, startPosInSourceSpace)
+  Quat.copy(/*out*/outSourceRotInDestSpace, startRotInSourceSpace)
+  // XXX(JULIAN): This is a hack that probably won't work in most cases
+  if (sourceList !== destList) {
+    applyOffsetToPosRot(/*out*/outSourcePosInDestSpace, /*out*/outSourceRotInDestSpace,
+                        startPosInSourceSpace, startRotInSourceSpace,
+                        sourceList.offsetPos, sourceList.offsetRot);
+  }
+}
+
 function getPosRotOffsetForDuplicateAlteration (outOffsetPos: IVector3, outOffsetRot: IQuaternion, duplicateAlteration : IAlterationDuplicate) {
-  const duplicatedEntity = duplicateAlteration.entityCopy;
   const controllerMetadata = duplicateAlteration.controllerMetadata; // source entity; source list; controller
 
   const sourceList = controllerMetadata.entityStartList;
   const destList = duplicateAlteration.entitiesList;
-
 
   const controllerPos = duplicateAlteration.controllerMetadata.controller.pos;
   const controllerRot = duplicateAlteration.controllerMetadata.controller.rot;
@@ -458,11 +467,11 @@ function getPosRotOffsetForDuplicateAlteration (outOffsetPos: IVector3, outOffse
           , controllerPosInDestSpace, Vec3.transformQuat(/*out*/entityTargetPos
                                               , controllerMetadata.offsetPos, controllerRotInDestSpace));
 
+  Vec3.copy(STATE.segments[2].start, entityTargetPos);
+
   const sourcePosInDestSpace = Vec3.create();
   const sourceRotInDestSpace = Quat.create();
-  applyOffsetToPosRot(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace,
-                      controllerMetadata.entityStartPos, controllerMetadata.entityStartRot,
-                      sourceList.offsetPos, sourceList.offsetRot);
+  getSourcePosRotInDestSpace(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace, sourceList, destList, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot);
 
   const oldToNewPos = Vec3.sub(/*out*/Vec3.create(), entityTargetPos, sourcePosInDestSpace);
 
@@ -1712,30 +1721,31 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           }
         } break;
         case ALTERATION_TYPE.DUPLICATE: {
-          const duplicatedEntity = (<IAlterationDuplicate>usedAlteration).entityCopy;
-          const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata; // source entity; source list; controller
+          const duplicateAlteration = (<IAlterationDuplicate>usedAlteration);
 
+          const outOffsetPos = Vec3.create();
+          const outOffsetRot = Quat.create();
+
+          getPosRotOffsetForDuplicateAlteration(outOffsetPos, outOffsetRot, duplicateAlteration);
+
+          const controllerMetadata = duplicateAlteration.controllerMetadata;
           const sourceList = controllerMetadata.entityStartList;
           const destList = usedAlteration.entitiesList;
-
+          
           const sourcePosInDestSpace = Vec3.create();
           const sourceRotInDestSpace = Quat.create();
-          applyOffsetToPosRot(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace,
-                              controllerMetadata.entityStartPos, controllerMetadata.entityStartRot,
-                              sourceList.offsetPos, sourceList.offsetRot);
+          getSourcePosRotInDestSpace(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace, sourceList, destList, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot);
           
-          const offsetPos = Vec3.create();
-          const offsetRot = Quat.create();
-          getPosRotOffsetForDuplicateAlteration(/*out*/offsetPos, /*out*/offsetRot, (<IAlterationDuplicate>usedAlteration));
-
           const entityTargetPos = Vec3.create();
-          Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, offsetPos);
+          Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, outOffsetPos);
+          
+          Vec3.copy(STATE.segments[1].start, entityTargetPos);
 
           const entityTargetRot = Quat.create();
-          Quat.multiply(/*out*/entityTargetRot, sourceRotInDestSpace, offsetRot);
+          Quat.multiply(/*out*/entityTargetRot, sourceRotInDestSpace, outOffsetRot);
 
-          Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
-          Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
+          Vec3.copy(/*out*/duplicateAlteration.entityCopy.pos, entityTargetPos);
+          Quat.copy(/*out*/duplicateAlteration.entityCopy.rot, entityTargetRot);
           
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
