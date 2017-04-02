@@ -437,42 +437,54 @@ function makeMoveByActionFromAlteration (moveAlteration : IAlterationMove, symbo
                         , rotOffset: deltaRot };
 }
 
-function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDuplicate, symbolMap : ISymbolMap) : IActionDuplicate {
+function getPosRotOffsetForDuplicateAlteration (outOffsetPos: IVector3, outOffsetRot: IQuaternion, duplicateAlteration : IAlterationDuplicate) {
+  const duplicatedEntity = duplicateAlteration.entityCopy;
+  const controllerMetadata = duplicateAlteration.controllerMetadata; // source entity; source list; controller
+
+  const sourceList = controllerMetadata.entityStartList;
+  const destList = duplicateAlteration.entitiesList;
+
+
   const controllerPos = duplicateAlteration.controllerMetadata.controller.pos;
   const controllerRot = duplicateAlteration.controllerMetadata.controller.rot;
-  let entityTargetPos = Vec3.clone(controllerPos);
-  let entityTargetRot = Quat.clone(controllerRot);
-  applyInverseOffsetToPosRot(entityTargetPos, entityTargetRot, entityTargetPos, entityTargetRot, duplicateAlteration.entitiesList.offsetPos, duplicateAlteration.entitiesList.offsetRot);
-  Vec3.copy(controllerPos, entityTargetPos);
+
+  const controllerPosInDestSpace = _tempVec;
+  const controllerRotInDestSpace = _tempQuat;
+  applyInverseOffsetToPosRot(/*out*/controllerPosInDestSpace, /*out*/controllerRotInDestSpace
+                            , controllerPos, controllerRot, destList.offsetPos, destList.offsetRot);
+
+  const entityTargetPos = Vec3.create();
   Vec3.add(/*out*/entityTargetPos
-          , entityTargetPos, Vec3.transformQuat(/*out*/Vec3.create()
-                                              , duplicateAlteration.controllerMetadata.offsetPos, entityTargetRot));
+          , controllerPosInDestSpace, Vec3.transformQuat(/*out*/entityTargetPos
+                                              , controllerMetadata.offsetPos, controllerRotInDestSpace));
 
-  Quat.mul(/*out*/entityTargetRot, entityTargetRot, duplicateAlteration.controllerMetadata.offsetRot);
+  const sourcePosInDestSpace = Vec3.create();
+  const sourceRotInDestSpace = Quat.create();
+  applyOffsetToPosRot(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace,
+                      controllerMetadata.entityStartPos, controllerMetadata.entityStartRot,
+                      sourceList.offsetPos, sourceList.offsetRot);
 
-  let entityStartPos = duplicateAlteration.controllerMetadata.entityStartPos;
-  let entityStartRot = duplicateAlteration.controllerMetadata.entityStartRot;
+  const oldToNewPos = Vec3.sub(/*out*/Vec3.create(), entityTargetPos, sourcePosInDestSpace);
 
-  const controllerMetadata = duplicateAlteration.controllerMetadata;
+  const oldToNewInUnitSpace = Vec3.transformQuat(Vec3.create(), oldToNewPos, Quat.invert(/*out*/Quat.create(), sourceRotInDestSpace));
+  let biggestIndex = 0; let biggestValue = -Infinity;
+  for (let i = 0; i < oldToNewInUnitSpace.length; i++) {
+    const curr = Math.abs(oldToNewInUnitSpace[i]);
+    if (curr > biggestValue) {
+      biggestValue = curr;
+      biggestIndex = i;
+    }
+  }
+  Vec3.set(/*out*/outOffsetPos, 0, 0, 0);
+  outOffsetPos[biggestIndex] = oldToNewInUnitSpace[biggestIndex];
+  Vec3.transformQuat(/*out*/outOffsetPos, outOffsetPos, sourceRotInDestSpace);
+  Quat.identity(/*out*/outOffsetRot);
+}
 
-  const oldControllerRot = Quat.create();
-  const oldControllerPos = Vec3.create();
-  Quat.invert(/*out*/oldControllerRot, Quat.multiply(/*out*/oldControllerRot, controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot, controllerMetadata.entityStartRot)));
-  Vec3.sub(/*out*/oldControllerPos, controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos, controllerMetadata.offsetPos, oldControllerRot));
-
-  const oldDir = Vec3.create(); 
-  Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
-  Vec3.normalize(/*out*/oldDir, oldDir);
-  const newDir = Vec3.create(); 
-  Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
-  Vec3.normalize(/*out*/newDir, newDir);
-
+function makeDuplicateActionFromAlteration (duplicateAlteration : IAlterationDuplicate, symbolMap : ISymbolMap) : IActionDuplicate {
   const deltaPos = Vec3.create(); 
   const deltaRot = Quat.create();
-  Vec3.sub(/*out*/deltaPos, entityTargetPos, entityStartPos);
-  Quat.invert(/*out*/deltaRot, entityStartRot);
-  Vec3.transformQuat(/*out*/deltaPos, deltaPos, deltaRot);
-  Quat.mul(/*out*/deltaRot, entityTargetRot, deltaRot);
+  getPosRotOffsetForDuplicateAlteration(/*out*/deltaPos, /*out*/deltaRot, duplicateAlteration);
 
   return <IActionDuplicate>{ type: ACTION_TYPE.DUPLICATE
                         , entitySymbol: symbolForEntityInMap(duplicateAlteration.entity, symbolMap)
@@ -868,10 +880,9 @@ function makeShelf (pos : IVector3, rot: IQuaternion) : IShelf {
 function makeControllerMetadataFromEntityInEntityListAndController (entity : IEntity, entitiesList : IEntityList, controller : IController) : IControllerMetadata {
   const controllerPos = Vec3.create();
   const controllerRot = Quat.create();
-  applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
-                            , controller.pos, controller.rot
-                            , entitiesList.offsetPos, entitiesList.offsetRot);
-  
+  applyInverseOffsetToPosRot(controllerPos, controllerRot, controller.pos, controller.rot, entitiesList.offsetPos, entitiesList.offsetRot);
+  // NOTE(JULIAN): controllerPos and Rot are now in entitiesList space
+
   const offsetPos : IVector3 = Vec3.create();
   const offsetRot : IQuaternion = Quat.create();
   Vec3.transformQuat(/*out*/offsetPos
@@ -886,21 +897,21 @@ function makeControllerMetadataFromEntityInEntityListAndController (entity : IEn
 
   return {
     controller: controller
+  , entityStartList: entitiesList
   , entityStartPos: Vec3.clone(entity.pos)
   , entityStartRot: Quat.clone(entity.rot)
-  , entityStartList: entitiesList
   , offsetPos: offsetPos
   , offsetRot: offsetRot
   };
 }
 
-function makeMoveAlteration (entity : IEntity, controller : IController, movementConstraint : GIZMO_VISUALS_FLAGS, entitiesList : IEntityList) : IAlterationMove {
+function makeMoveAlteration (entity : IEntity, controller : IController, movementConstraint : GIZMO_VISUALS_FLAGS, sourceEntitiesList : IEntityList, destEntitiesList: IEntityList) : IAlterationMove {
   return {
     type: ALTERATION_TYPE.MOVE
   , valid: true
-  , entitiesList: entitiesList
+  , entitiesList: destEntitiesList
   , entity: entity
-  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, entitiesList, controller)
+  , controllerMetadata: makeControllerMetadataFromEntityInEntityListAndController(entity, destEntitiesList/*sourceEntitiesList*/, controller)  // XXX TODO(JULIAN): Fix this! Should be source, but will break upstream
   , constraint: movementConstraint
   };
 }
@@ -968,7 +979,7 @@ function getInitialState () : IState {
     const clock = makeClock(Vec3.fromValues(-1.485,0,-0.686), Quat.fromValues(0,0.7071068,0,0.7071068));
     const shelf = makeShelf(Vec3.fromValues(1.373,0.921,0), Quat.fromValues(0,-0.7071067,0,0.7071069));
 
-    const entitiesList = makeEntityList(Vec3.fromValues(0,1,0), Quat.create());
+    const entitiesList = makeEntityList(Vec3.create(), Quat.create());
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.5,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CUBE));
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,0.8,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.CYLINDER));
     // entitiesList.entities.push(makeEntity(Vec3.fromValues(0,1,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), MODEL_TYPE.SPHERE));
@@ -1593,16 +1604,17 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
 
           switch (controller.attachment) {
             case CONTROLLER_ATTACHMENT_TYPE.GRAB: {
+              let destList = sourceList;
               if (sourceList === ovenEntities) {
                 console.log("MAKING OVEN ALTERATION");
               }
               if (sourceList === shelfEntities) {
                 closestEntity = cloneEntity(closestEntity);
                 applyOffsetToEntity(closestEntity, sourceList.offsetPos, sourceList.offsetRot); 
-                sourceList = worldEntities;
+                destList = worldEntities;
                 worldEntities.entities.push(closestEntity);
               }
-              newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList));
+              newInProgressAlterations.push(makeMoveAlteration(closestEntity, controller, gizmoFlags, sourceList, destList));
             } break;
             case CONTROLLER_ATTACHMENT_TYPE.DELETE: {
               if (sourceList !== shelfEntities) {
@@ -1701,74 +1713,47 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
         } break;
         case ALTERATION_TYPE.DUPLICATE: {
           const duplicatedEntity = (<IAlterationDuplicate>usedAlteration).entityCopy;
-          const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata;
+          const controllerMetadata = (<IAlterationDuplicate>usedAlteration).controllerMetadata; // source entity; source list; controller
 
+          const sourceList = controllerMetadata.entityStartList;
+          const destList = usedAlteration.entitiesList;
 
           const controllerPos = _tempVec;
           const controllerRot = _tempQuat;
           applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
-                                    , controller.pos, controller.rot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
-          // Controller pos and rot are now in destEntityList space
+                                    , controller.pos, controller.rot, destList.offsetPos, destList.offsetRot);
+          // controllerPos and Rot are now in destList space
           
           const entityTargetPos = Vec3.create();
           Vec3.add(/*out*/entityTargetPos
                   , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
                                                       , controllerMetadata.offsetPos, controllerRot));
 
-          // offsetPos = Vec3.transformQuat(entity.pos - controllerPos, Quat.invert(controllerRot))
-          // offsetRot = Quat.invert(controllerRot) * entity.rot
+          const sourcePosInDestSpace = Vec3.create();
+          const sourceRotInDestSpace = Quat.create();
+          applyOffsetToPosRot(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace,
+                              controllerMetadata.entityStartPos, controllerMetadata.entityStartRot,
+                              sourceList.offsetPos, sourceList.offsetRot);
 
-          const entityStartRotInDestSpace = Quat.create();
-          const entityStartPosInDestSpace = Vec3.create();
-          // applyInverseOffsetToPosRot(/*out*/entityStartPosInDestSpace, /*out*/entityStartRotInDestSpace,
-                                    //  controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, controllerMetadata.entityStartList.offsetPos, controllerMetadata.entityStartList.offsetRot);
-          applyOffsetToPosRot(/*out*/entityStartPosInDestSpace, /*out*/entityStartRotInDestSpace
-                                    , controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
-          // Vec3.copy(/*out*/duplicatedEntity.pos, entityStartPosInDestSpace);
+          const oldToNewPos = Vec3.sub(/*out*/Vec3.create(), entityTargetPos, sourcePosInDestSpace);
 
-          // const oldControllerRot = Quat.create();
-          // const oldControllerPos = Vec3.create();
-          // Quat.invert(/*out*/oldControllerRot
-          //            , Quat.multiply(/*out*/oldControllerRot
-          //                           , controllerMetadata.offsetRot, Quat.invert(/*out*/oldControllerRot
-          //                                                                      , controllerMetadata.entityStartRot)));
-          // Vec3.sub(/*out*/oldControllerPos
-          //         , controllerMetadata.entityStartPos, Vec3.transformQuat(/*out*/oldControllerPos
-          //                                                        , controllerMetadata.offsetPos, oldControllerRot));
-          // applyInverseOffsetToPosRot(/*out*/oldControllerPos, /*out*/oldControllerRot,
-          //                            controllerMetadata.entityStartPos, controllerMetadata.entityStartRot, controllerMetadata.entityStartList.offsetPos, controllerMetadata.entityStartList.offsetRot);
-          // applyOffsetToPosRot(/*out*/oldControllerPos, /*out*/oldControllerRot
-          //                    , oldControllerPos, oldControllerRot, usedAlteration.entitiesList.offsetPos, usedAlteration.entitiesList.offsetRot);
-          
-          
+          const oldToNewInUnitSpace = Vec3.transformQuat(Vec3.create(), oldToNewPos, Quat.invert(/*out*/Quat.create(), sourceRotInDestSpace));
+          let biggestIndex = 0; let biggestValue = -Infinity;
+          for (let i = 0; i < oldToNewInUnitSpace.length; i++) {
+            const curr = Math.abs(oldToNewInUnitSpace[i]);
+            if (curr > biggestValue) {
+              biggestValue = curr;
+              biggestIndex = i;
+            }
+          }
+          const delta = Vec3.create();
+          delta[biggestIndex] = oldToNewInUnitSpace[biggestIndex];
+          Vec3.transformQuat(/*out*/delta, delta, sourceRotInDestSpace);
 
-          // // const oldDir = Vec3.create(); 
-          // // Vec3.sub(/*out*/oldDir, oldControllerPos, controllerMetadata.entityStartPos);
-          // // Vec3.normalize(/*out*/oldDir, oldDir);
-          // // const newDir = Vec3.create(); 
-          // // Vec3.sub(/*out*/newDir, controllerPos, controllerMetadata.entityStartPos);
-          // // Vec3.normalize(/*out*/newDir, newDir);
+          Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, delta);
 
-          // // const entityTargetRot = Quat.mul(/*out*/Quat.create(), controllerRot, controllerMetadata.offsetRot);
-          // // Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
-          // // Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
-          // const deltaPos = Vec3.create();
-          // Vec3.sub(/*out*/deltaPos, oldControllerPos, controllerPos);
-          // const tempRot = Quat.create();
-          // Vec3.transformQuat(/*out*/deltaPos, deltaPos, Quat.invert(/*out*/tempRot, entityStartRotInDestSpace));
-          // for (let i = 0; i < 4; i++) {
-          //   deltaPos[i] = Math.abs(deltaPos[i]);
-          // }
-
-          // // const displacementAxis = Vec3.create();
-          // if (deltaPos[0] > deltaPos[1] && deltaPos[0] > deltaPos[2]) {
-          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, X_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
-          // } else if (deltaPos[1] > deltaPos[0] && deltaPos[1] > deltaPos[2]) {
-          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, Y_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
-          // } else {
-          //   displaceAlongAxis(/*out*/duplicatedEntity.pos, Z_VECTOR3, entityStartPosInDestSpace, entityStartRotInDestSpace, entityTargetPos);
-          // }
-          // Quat.copy(/*out*/duplicatedEntity.rot, entityStartRotInDestSpace);
+          Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
+          Quat.copy(/*out*/duplicatedEntity.rot, sourceRotInDestSpace);
           
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
