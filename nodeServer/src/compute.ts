@@ -448,8 +448,8 @@ function getPosRotOffsetForDuplicateAlteration (outOffsetPos: IVector3, outOffse
   const controllerPos = duplicateAlteration.controllerMetadata.controller.pos;
   const controllerRot = duplicateAlteration.controllerMetadata.controller.rot;
 
-  const controllerPosInDestSpace = _tempVec;
-  const controllerRotInDestSpace = _tempQuat;
+  const controllerPosInDestSpace = Vec3.create();
+  const controllerRotInDestSpace = Quat.create();
   applyInverseOffsetToPosRot(/*out*/controllerPosInDestSpace, /*out*/controllerRotInDestSpace
                             , controllerPos, controllerRot, destList.offsetPos, destList.offsetRot);
 
@@ -1718,42 +1718,24 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           const sourceList = controllerMetadata.entityStartList;
           const destList = usedAlteration.entitiesList;
 
-          const controllerPos = _tempVec;
-          const controllerRot = _tempQuat;
-          applyInverseOffsetToPosRot(/*out*/controllerPos, /*out*/controllerRot
-                                    , controller.pos, controller.rot, destList.offsetPos, destList.offsetRot);
-          // controllerPos and Rot are now in destList space
-          
-          const entityTargetPos = Vec3.create();
-          Vec3.add(/*out*/entityTargetPos
-                  , controllerPos, Vec3.transformQuat(/*out*/entityTargetPos
-                                                      , controllerMetadata.offsetPos, controllerRot));
-
           const sourcePosInDestSpace = Vec3.create();
           const sourceRotInDestSpace = Quat.create();
           applyOffsetToPosRot(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace,
                               controllerMetadata.entityStartPos, controllerMetadata.entityStartRot,
                               sourceList.offsetPos, sourceList.offsetRot);
+          
+          const offsetPos = Vec3.create();
+          const offsetRot = Quat.create();
+          getPosRotOffsetForDuplicateAlteration(/*out*/offsetPos, /*out*/offsetRot, (<IAlterationDuplicate>usedAlteration));
 
-          const oldToNewPos = Vec3.sub(/*out*/Vec3.create(), entityTargetPos, sourcePosInDestSpace);
+          const entityTargetPos = Vec3.create();
+          Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, offsetPos);
 
-          const oldToNewInUnitSpace = Vec3.transformQuat(Vec3.create(), oldToNewPos, Quat.invert(/*out*/Quat.create(), sourceRotInDestSpace));
-          let biggestIndex = 0; let biggestValue = -Infinity;
-          for (let i = 0; i < oldToNewInUnitSpace.length; i++) {
-            const curr = Math.abs(oldToNewInUnitSpace[i]);
-            if (curr > biggestValue) {
-              biggestValue = curr;
-              biggestIndex = i;
-            }
-          }
-          const delta = Vec3.create();
-          delta[biggestIndex] = oldToNewInUnitSpace[biggestIndex];
-          Vec3.transformQuat(/*out*/delta, delta, sourceRotInDestSpace);
-
-          Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, delta);
+          const entityTargetRot = Quat.create();
+          Quat.multiply(/*out*/entityTargetRot, sourceRotInDestSpace, offsetRot);
 
           Vec3.copy(/*out*/duplicatedEntity.pos, entityTargetPos);
-          Quat.copy(/*out*/duplicatedEntity.rot, sourceRotInDestSpace);
+          Quat.copy(/*out*/duplicatedEntity.rot, entityTargetRot);
           
           if (didControllerJustRelease(controller)) {
             // DELETE this alteration (by not adding it to newInProgressAlterations); make a new action for it...
