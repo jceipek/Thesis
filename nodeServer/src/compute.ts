@@ -467,8 +467,6 @@ function getPosRotOffsetForDuplicateAlteration (outOffsetPos: IVector3, outOffse
           , controllerPosInDestSpace, Vec3.transformQuat(/*out*/entityTargetPos
                                               , controllerMetadata.offsetPos, controllerRotInDestSpace));
 
-  Vec3.copy(STATE.segments[2].start, entityTargetPos);
-
   const sourcePosInDestSpace = Vec3.create();
   const sourceRotInDestSpace = Quat.create();
   getSourcePosRotInDestSpace(/*out*/sourcePosInDestSpace, /*out*/sourceRotInDestSpace, sourceList, destList, controllerMetadata.entityStartPos, controllerMetadata.entityStartRot);
@@ -1738,8 +1736,6 @@ function doProcessControllerInput (controllers: IController[], currSymbolMap : I
           
           const entityTargetPos = Vec3.create();
           Vec3.add(/*out*/entityTargetPos, sourcePosInDestSpace, outOffsetPos);
-          
-          Vec3.copy(STATE.segments[1].start, entityTargetPos);
 
           const entityTargetRot = Quat.create();
           Quat.multiply(/*out*/entityTargetRot, sourceRotInDestSpace, outOffsetRot);
