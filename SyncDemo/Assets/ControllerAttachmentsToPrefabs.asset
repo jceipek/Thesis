@@ -19,4 +19,4 @@ MonoBehaviour:
   - ControllerAttachmentType: 2
     Prefab: {fileID: 1000010743893250, guid: f0ff592847eb64933966bb4440375b56, type: 2}
   - ControllerAttachmentType: 3
-    Prefab: {fileID: 1000013038996066, guid: 94481d5ac97ae4438a9a584b382f6633, type: 2}
+    Prefab: {fileID: 1621092534743658, guid: 94481d5ac97ae4438a9a584b382f6633, type: 2}
