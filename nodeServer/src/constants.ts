@@ -9,3 +9,4 @@ export const UNIT_VECTOR3 = Vec3.fromValues(1,1,1);
 export const NULL_VECTOR3 = Vec3.fromValues(0,0,0);
 export const IDENT_QUAT = Quat.create();
 export const BASE_COLOR = new Uint8Array([0xFF,0xFF,0xFF,0xFF]);
+export const MAX_OBJECT_COUNT = 300;

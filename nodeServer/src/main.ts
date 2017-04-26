@@ -28,7 +28,7 @@ import * as Transfer from './stateTransfer'
 import { PERFORMANCE_TRACKER, nanosecondsFromElapsedDelta, countObjects } from './instrumentation'
 
 let _interval : null|NodeJS.Timer = null;
-const TRANSIENT_STATE : ITransientState = { inputData: new Map<string,IInputData>() };
+const TRANSIENT_STATE : ITransientState = { inputData: new Map<string,IInputData>(), backupState: null };
 
 function stepSimulationAndSend () {
   if (PERFORMANCE_TRACKER[PERFORMANCE_TRACKER.currFrame] === undefined) {
@@ -43,7 +43,7 @@ function stepSimulationAndSend () {
       controllers.push(controller);
     }
   }
-  stepSimulation(controllers); // S_t -> S_t+1
+  stepSimulation(controllers, TRANSIENT_STATE); // S_t -> S_t+1
   for (let controller of controllers) {
     if (controller.ignore) { continue; }
     controller.grab.last = controller.grab.curr; // So that we can grab things

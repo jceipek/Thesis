@@ -25,17 +25,20 @@ export interface IState {
 
   entities: IEntityList;
   recycleableEntities: IEntityList;
-  storedEntities: IEntityList;
+  // storedEntities: IEntityList;
   models: IEntityList;
   clock: IClock;
   oven: IOven;
   shelf: IShelf;
+
+  totalObjectCount: number;
   // latestEntityId: number;
   segments: ISegment[]
 }
 
 export interface ITransientState {
   inputData: Map<string,IInputData>;
+  backupState: IState
 }
 
 export interface IEntityList {
@@ -43,7 +46,7 @@ export interface IEntityList {
   offsetPos: IVector3;
   offsetRot: IQuaternion;
   offsetScale: IVector3; // TODO(JULIAN): handle this consistently!
-  spatialHash: ISpatialHash<IEntity>;
+  // spatialHash: ISpatialHash<IEntity>;
 }
 
 export interface IEntity {

@@ -7,8 +7,8 @@ import { MESSAGE_TYPE, MODEL_TYPE, CONTROLLER_ATTACHMENT_TYPE, GIZMO_VISUALS_FLA
 import * as BPromise from 'bluebird'
 import * as FS from 'fs'
 import { vec3 as Vec3, quat as Quat } from 'gl-matrix'
-import * as SH from './spatialHash'
-import { ISpatialHash } from './spatialHash'
+// import * as SH from './spatialHash'
+// import { ISpatialHash } from './spatialHash'
 import { usleep } from 'sleep'
 import {
   IState
@@ -62,6 +62,7 @@ import {
 , NULL_VECTOR3
 , IDENT_QUAT
 , BASE_COLOR
+, MAX_OBJECT_COUNT
 } from './constants'
 import * as Transfer from './stateTransfer'
 import { PERFORMANCE_TRACKER, nanosecondsFromElapsedDelta, countObjects } from './instrumentation'
@@ -95,6 +96,7 @@ function recycleEntity (recycleableEntities : IEntityList) {
 // }
 
 export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, tint: IColor, type : MODEL_TYPE, forceNew? : boolean) : IEntity {
+  if (!forceNew) { STATE.totalObjectCount++; }
   let res = forceNew? undefined : recycleEntity(STATE.recycleableEntities);
   if (res !== undefined) {
     res.type = type;
@@ -127,6 +129,7 @@ export function makeEntity (pos : IVector3, rot: IQuaternion, scale: IVector3, t
 }
 
 function deleteEntity (entity: IEntity, entityList: IEntityList, dontRemoveOptimization?: boolean) {
+  STATE.totalObjectCount--;
   deleteAllInEntityList(entity.children);
   entity.deleted = true;
   STATE.recycleableEntities.entities.push(entity);
@@ -151,29 +154,28 @@ function copyEntityData (out : IEntity, entity : IEntity) {
   out.gizmoVisuals = entity.gizmoVisuals;
 }
 
-function cloneEntity (entity : IEntity) : IEntity {
-  let res = recycleEntity(STATE.recycleableEntities);
-  if (res !== undefined) {
+function cloneEntity (entity : IEntity, keepId?: boolean) : IEntity {
+  keepId = keepId? keepId : false;
+  let res : IEntity = null;
+  if (!keepId) { 
+    STATE.totalObjectCount++;
+    res = recycleEntity(STATE.recycleableEntities);
+  }
+  if (res) {
     copyEntityData(/*out*/res, entity);
     deleteAllInEntityList(res.children);
     for (let child of entity.children.entities) {
-      res.children.entities.push(cloneEntity(child));
+      res.children.entities.push(cloneEntity(child, keepId));
     }
   } else {
-    const pos = Vec3.clone(entity.pos);
-    const rot = Quat.clone(entity.rot);
-    const children = makeEntityList(pos, rot);
-    for (let child of entity.children.entities) {
-      children.entities.push(cloneEntity(child));
-    }
     res = {
       type: entity.type
-    , id: _latestEntityId++
-    , pos: pos
-    , rot: rot
+    , id: keepId? entity.id : _latestEntityId++
+    , pos: Vec3.clone(entity.pos)
+    , rot: Quat.clone(entity.rot)
     , scale: Vec3.clone(entity.scale)
     , visible: entity.visible
-    , children: children
+    , children: cloneEntityList(entity.children, keepId)
     , tint: new Uint8Array(entity.tint)
     , interactionVolume: entity.interactionVolume
     , deleted: entity.deleted
@@ -850,7 +852,7 @@ function makeEntityList (posOffset : IVector3, rotOffset : IQuaternion, scaleOff
   , offsetPos: posOffset 
   , offsetRot: rotOffset
   , offsetScale: scaleOffset
-  , spatialHash: SH.make<IEntity>(CELL_SIZE, CELL_COUNT)
+  // , spatialHash: SH.make<IEntity>(CELL_SIZE, CELL_COUNT)
   };
 }
 
@@ -945,35 +947,35 @@ function makeDeleteAlteration (entity : IEntity, controller : IController, entit
 }
 
 // TODO(JULIAN): Rethink saving and restoring (we don't need clones with different ids)
-function saveEntitiesToStoredEntities (state : IState) {
-  state.storedEntities.entities.length = 0;
-  for (let entity of state.entities.entities) {
-    state.storedEntities.entities.push(cloneEntity(entity));
-  }
-}
+// function saveEntitiesToStoredEntities (state : IState) {
+//   state.storedEntities.entities.length = 0;
+//   for (let entity of state.entities.entities) {
+//     state.storedEntities.entities.push(cloneEntity(entity));
+//   }
+// }
 
 // TODO(JULIAN): Rethink saving and restoring
-function restoreEntitiesFromStoredEntities (state : IState) {
-  const oldEntityIds = new Set();
-  for (let entity of state.entities.entities) {
-    oldEntityIds.add(entity.id);
-  }
-  for (let entity of state.storedEntities.entities) {
-    if (oldEntityIds.has(entity.id)) {
-      oldEntityIds.delete(entity.id);
-    }
-  }
-  for (let eIndex = state.entities.entities.length - 1; eIndex >= 0; eIndex--) {
-    let entity = state.entities.entities[eIndex];
-    if (oldEntityIds.has(entity.id)) {
-      deleteEntity(entity, state.entities);
-      state.storedEntities.entities.push(entity);
-    }
-  }
-  state.entities = state.storedEntities;
-  state.storedEntities.entities = [];
-  saveEntitiesToStoredEntities(state);
-}
+// function restoreEntitiesFromStoredEntities (state : IState) {
+//   const oldEntityIds = new Set();
+//   for (let entity of state.entities.entities) {
+//     oldEntityIds.add(entity.id);
+//   }
+//   for (let entity of state.storedEntities.entities) {
+//     if (oldEntityIds.has(entity.id)) {
+//       oldEntityIds.delete(entity.id);
+//     }
+//   }
+//   for (let eIndex = state.entities.entities.length - 1; eIndex >= 0; eIndex--) {
+//     let entity = state.entities.entities[eIndex];
+//     if (oldEntityIds.has(entity.id)) {
+//       deleteEntity(entity, state.entities);
+//       state.storedEntities.entities.push(entity);
+//     }
+//   }
+//   state.entities = state.storedEntities;
+//   state.storedEntities.entities = [];
+//   saveEntitiesToStoredEntities(state);
+// }
 
 function getInitialState () : IState {
   let statefile = process.argv[2];
@@ -1002,11 +1004,12 @@ function getInitialState () : IState {
     , simulating: SIMULATION_TYPE.PAUSED
     , entities: entitiesList
     , recycleableEntities: makeEntityList(Vec3.create(), Quat.create())
-    , storedEntities: makeEntityList(Vec3.create(), Quat.create())
+    // , storedEntities: makeEntityList(Vec3.create(), Quat.create())
     , models: modelsList
     , clock: clock
     , oven: oven
     , shelf: shelf
+    , totalObjectCount: 0
 
     , inProgressAlterations: []
     // , latestEntityId: 0
@@ -1024,7 +1027,7 @@ function getInitialState () : IState {
     //   DEFAULT_STATE.entities.push(makeEntity(Vec3.fromValues(0,0.1*i,0), Quat.create(), Vec3.clone(UNIT_VECTOR3), new Uint8Array([0xFF,0x00,0x00,0xEE]), ENTITY_TYPE.DEFAULT))
     // }
 
-    saveEntitiesToStoredEntities(DEFAULT_STATE);
+    // saveEntitiesToStoredEntities(DEFAULT_STATE);
     return DEFAULT_STATE;
   }
 }
@@ -1112,6 +1115,14 @@ function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : I
                                          , child.pos, parent.rot));
 }
 
+function updateClockPlayPauseButton (simulationType: SIMULATION_TYPE) {
+  if (simulationType === SIMULATION_TYPE.PAUSED) {
+      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+  } else {
+    Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
+  }
+}
+
 function doProcessClockInput (controllers : IController[]) {
   const buttonTypes = [ MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON, /*MODEL_TYPE.CLOCK_RESET_STATE_BUTTON,*/ MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON /*, MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON*/ ];
   let doIntersect = {};
@@ -1137,18 +1148,16 @@ function doProcessClockInput (controllers : IController[]) {
   if (playPauseState.curr === 1 && playPauseState.last === 0) {
     if (STATE.simulating === SIMULATION_TYPE.PAUSED) {
       STATE.simulating = SIMULATION_TYPE.FWD_CONT;
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
     } else {
       STATE.simulating = SIMULATION_TYPE.PAUSED;
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
     }
   }
 
   const stepFwdState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_SINGLE_STEP_BUTTON); 
   if (stepFwdState.curr === 1 && stepFwdState.last === 0) {
       STATE.simulating = SIMULATION_TYPE.FWD_ONE;
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
   }
+  updateClockPlayPauseButton(STATE.simulating);
 
   // const freezeStateState = STATE.clock.buttonStates.get(MODEL_TYPE.CLOCK_FREEZE_STATE_BUTTON); 
   // if (freezeStateState.curr === 1 && freezeStateState.last === 0) {
@@ -1777,7 +1786,72 @@ function clearGizmosForEntityList (entityList : IEntityList) {
   }
 }
 
-export function stepSimulation (controllers : IController[]) {
+function deleteExcessObjects () {
+  // let entities = STATE.entities.entities;
+  // let sortedEntities
+  // deleteEntity
+}
+
+function cloneState (state: IState) : IState {
+  let stateClone : IState = {
+    globalTime: state.globalTime
+  , simulationTime: state.simulationTime
+  , simulating: state.simulating
+  , inProgressAlterations: [] // For sure?
+  , entities: cloneEntityList(state.entities, true)
+  , recycleableEntities: cloneEntityList(state.recycleableEntities, true)
+  , models: cloneEntityList(state.models, true)
+  , clock: state.clock
+  , oven: state.oven
+  , shelf: state.shelf
+  , totalObjectCount: state.totalObjectCount
+  , segments: state.segments
+  };
+  return stateClone;
+}
+
+function swapStates (stateA: IState, stateB: IState) {
+  [stateA.globalTime, stateB.globalTime] = [stateB.globalTime, stateA.globalTime];
+  [stateA.simulationTime, stateB.simulationTime] = [stateB.simulationTime, stateA.simulationTime];
+  [stateA.simulating, stateB.simulating] = [stateB.simulating, stateA.simulating];
+  [stateA.inProgressAlterations, stateB.inProgressAlterations] = [stateB.inProgressAlterations, stateA.inProgressAlterations];
+  [stateA.entities, stateB.entities] = [stateB.entities, stateA.entities];
+  [stateA.recycleableEntities, stateB.recycleableEntities] = [stateB.recycleableEntities, stateA.recycleableEntities];
+  [stateA.models, stateB.models] = [stateB.models, stateA.models];
+  // [stateA.clock, stateB.clock] = [stateB.clock, stateA.clock];
+  // [stateA.oven, stateB.oven] = [stateB.oven, stateA.oven];
+  // [stateA.shelf, stateB.shelf] = [stateB.shelf, stateA.shelf];
+  [stateA.totalObjectCount, stateB.totalObjectCount] = [stateB.totalObjectCount, stateA.totalObjectCount];
+  // [stateA.segments, stateB.segments] = [stateB.segments, stateA.segments];
+}
+
+function cloneEntityList (entityList: IEntityList, keepIds?: boolean) : IEntityList {
+  let entitiesClone = [];
+  for (let e of entityList.entities) {
+    entitiesClone.push(cloneEntity(e, keepIds/*keep entity id*/));
+  }
+  let entityListClone : IEntityList = {
+    entities: entitiesClone
+  , offsetPos: Vec3.clone(entityList.offsetPos)
+  , offsetRot: Quat.clone(entityList.offsetRot)
+  , offsetScale: Vec3.clone(entityList.offsetScale)
+  };
+  return entityListClone;
+}
+
+  let clockR = null; 
+export function stepSimulation (controllers : IController[], transientState: ITransientState) {
+  if (STATE.totalObjectCount > MAX_OBJECT_COUNT) {
+    console.log('EXCEEDED TOTAL OBJECTS:' + STATE.totalObjectCount);
+    swapStates(transientState.backupState, STATE);
+    transientState.backupState.simulating = SIMULATION_TYPE.PAUSED;
+    STATE.simulating = SIMULATION_TYPE.PAUSED;
+    console.log('>> NOW TOTAL OBJECTS:' + STATE.totalObjectCount);
+    // TODO(JULIAN): delete objects so that we can continue!
+    return;
+  } else {
+    transientState.backupState = cloneState(STATE);
+  }
   // Quat.slerp(STATE.controllerData.get('DEBUG')[0].rot, DEBUG_START_ROT, DEBUG_ROT, Math.abs(Math.sin(STATE.time)));
   // Vec3.lerp(STATE.controllerData.get('DEBUG')[0].pos, DEBUG_START_POS, DEBUG_END_POS, Math.abs(Math.sin(STATE.time)));
 
@@ -1819,6 +1893,13 @@ export function stepSimulation (controllers : IController[]) {
   // for (let entity of STATE.entities.entities) {
   //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
   // }
+  if (clockR === null) {
+    clockR = STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot;
+  } else {
+    console.log("OLD: "+clockR[0]+" new "+STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot[0]);
+  }
+  updateClockPlayPauseButton(STATE.simulating);
+  console.log(">> OLD: "+clockR[0]+" new "+STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot[0]);
 }
 
 function serializeState (state) : string {
