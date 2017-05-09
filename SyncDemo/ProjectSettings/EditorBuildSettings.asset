@@ -7,5 +7,10 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 0
     path: Assets/Demo.unity
-  - enabled: 1
+    guid: 3f271de4e107b43b7ab9d64368c016f6
+  - enabled: 0
     path: Assets/DebugEnvironment.unity
+    guid: 523eecab2db65441cb34f00461ae06d0
+  - enabled: 1
+    path: Assets/ViveEnvironment.unity
+    guid: 051d1b94692b7b74a96a2e5427feb719
