@@ -40,6 +40,19 @@ public class MessageHandler : MonoBehaviour {
         }
     }
 
+    public void ResetObjects () {
+        for (int i = 0; i < _models.Length; i++) {
+            if (_models[i] != null) {
+                _models[i].gameObject.SetActive(false);
+            } 
+        }
+        // for (int i = 0; i < _velocityColorEntities.Length; i++) {
+        //     if (_velocityColorEntities[i] != null) {
+        //         _velocityColorEntities[i].gameObject.SetActive(false);
+        //     }
+        // }
+    }
+
     public static float _simulationTime; 
     void ProcessSimulationTimeMessage (NetMessage message) {
         _simulationTime = message.Time;

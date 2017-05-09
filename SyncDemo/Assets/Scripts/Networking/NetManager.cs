@@ -76,10 +76,23 @@ public class NetManager : MonoBehaviour {
         }
     }
 
+    int _framesSinceNoResponse = 0;
+
     void Update () {
         // if (_writeMessageBuffer.Count > 0) {
             _readMessageBuffer = Interlocked.Exchange(ref _writeMessageBuffer, _readMessageBuffer);
             // Debug.Log(_readMessageBuffer.Count);
+            bool gotResponse = (_readMessageBuffer.Count > 0);
+            if (!gotResponse) {
+                _framesSinceNoResponse++;
+            } else {
+                if (_framesSinceNoResponse >= 90) {
+                    // RESET HERE
+                    Debug.Log("RESET Due to not hearing");
+                    _messageHandler.ResetObjects();
+                }
+                _framesSinceNoResponse = 0;
+            }
             for (int i = 0; i < _readMessageBuffer.Count; i++) {
                 _messageHandler.ProcessMessage(_readMessageBuffer.InternalBuffer[i]);
                 // Debug.Log(_readMessageBuffer.InternalBuffer[i]);
