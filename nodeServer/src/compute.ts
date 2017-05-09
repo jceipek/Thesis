@@ -1116,10 +1116,11 @@ function getPosRotForSubObj (outPos : IVector3, outRot : IQuaternion, parent : I
 }
 
 function updateClockPlayPauseButton (simulationType: SIMULATION_TYPE) {
+  let buttonRot = STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot;
   if (simulationType === SIMULATION_TYPE.PAUSED) {
-      Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_BASE_ROT);
+    Quat.copy(/*out*/buttonRot, CLOCK_BUTTON_BASE_ROT);
   } else {
-    Quat.copy(/*out*/STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot, CLOCK_BUTTON_FLIPPED_ROT);
+    Quat.copy(/*out*/buttonRot, CLOCK_BUTTON_FLIPPED_ROT);
   }
 }
 
@@ -1800,7 +1801,7 @@ function cloneState (state: IState) : IState {
   , inProgressAlterations: [] // For sure?
   , entities: cloneEntityList(state.entities, true)
   , recycleableEntities: cloneEntityList(state.recycleableEntities, true)
-  , models: cloneEntityList(state.models, true)
+  , models: state.models //cloneEntityList(state.models, true)
   , clock: state.clock
   , oven: state.oven
   , shelf: state.shelf
@@ -1818,11 +1819,11 @@ function swapStates (stateA: IState, stateB: IState) {
   [stateA.entities, stateB.entities] = [stateB.entities, stateA.entities];
   [stateA.recycleableEntities, stateB.recycleableEntities] = [stateB.recycleableEntities, stateA.recycleableEntities];
   [stateA.models, stateB.models] = [stateB.models, stateA.models];
-  // [stateA.clock, stateB.clock] = [stateB.clock, stateA.clock];
-  // [stateA.oven, stateB.oven] = [stateB.oven, stateA.oven];
-  // [stateA.shelf, stateB.shelf] = [stateB.shelf, stateA.shelf];
+  [stateA.clock, stateB.clock] = [stateB.clock, stateA.clock];
+  [stateA.oven, stateB.oven] = [stateB.oven, stateA.oven];
+  [stateA.shelf, stateB.shelf] = [stateB.shelf, stateA.shelf];
   [stateA.totalObjectCount, stateB.totalObjectCount] = [stateB.totalObjectCount, stateA.totalObjectCount];
-  // [stateA.segments, stateB.segments] = [stateB.segments, stateA.segments];
+  [stateA.segments, stateB.segments] = [stateB.segments, stateA.segments];
 }
 
 function cloneEntityList (entityList: IEntityList, keepIds?: boolean) : IEntityList {
@@ -1844,8 +1845,8 @@ export function stepSimulation (controllers : IController[], transientState: ITr
   if (STATE.totalObjectCount > MAX_OBJECT_COUNT) {
     console.log('EXCEEDED TOTAL OBJECTS:' + STATE.totalObjectCount);
     swapStates(transientState.backupState, STATE);
-    transientState.backupState.simulating = SIMULATION_TYPE.PAUSED;
     STATE.simulating = SIMULATION_TYPE.PAUSED;
+    updateClockPlayPauseButton(STATE.simulating);
     console.log('>> NOW TOTAL OBJECTS:' + STATE.totalObjectCount);
     // TODO(JULIAN): delete objects so that we can continue!
     return;
@@ -1883,23 +1884,6 @@ export function stepSimulation (controllers : IController[], transientState: ITr
   if (STATE.simulating === SIMULATION_TYPE.FWD_ONE) {
     STATE.simulating = SIMULATION_TYPE.PAUSED;
   }
-
-  // SH.clearCells(STATE.shelf.clonableModels.spatialHash);
-  // for (let entity of STATE.shelf.clonableModels.entities) {
-  //   SH.addToCell(entity, entity.pos, STATE.shelf.clonableModels.spatialHash);
-  // }
-
-  // SH.clearCells(STATE.entities.spatialHash);
-  // for (let entity of STATE.entities.entities) {
-  //   SH.addToCell(entity, entity.pos, STATE.entities.spatialHash);
-  // }
-  if (clockR === null) {
-    clockR = STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot;
-  } else {
-    console.log("OLD: "+clockR[0]+" new "+STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot[0]);
-  }
-  updateClockPlayPauseButton(STATE.simulating);
-  console.log(">> OLD: "+clockR[0]+" new "+STATE.clock.buttonModels.get(MODEL_TYPE.CLOCK_PLAY_PAUSE_BUTTON).rot[0]);
 }
 
 function serializeState (state) : string {
